@@ -31,6 +31,6 @@
         });
         window.SUPERADMIN_API_BASE = 'api.php?action=';
     </script>
-    <script src="assets/js/app.js"></script>
+    <script src="assets/js/superadmin.js"></script>
 </body>
 </html>
