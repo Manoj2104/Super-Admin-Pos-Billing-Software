@@ -18,13 +18,25 @@ function getCloudPdo(): \PDO {
         return $pdo;
     }
 
-    $dsn = sprintf("pgsql:host=%s;port=%d;dbname=%s;sslmode=require", SUPABASE_HOST, SUPABASE_PORT, SUPABASE_DB);
-    $pdo = new \PDO($dsn, SUPABASE_USER, SUPABASE_PASS, [
-        \PDO::ATTR_ERRMODE            => \PDO::ERRMODE_EXCEPTION,
-        \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-        \PDO::ATTR_TIMEOUT            => 8,
-    ]);
-    return $pdo;
+    $modes = ['require', 'prefer', 'allow', 'disable'];
+    $lastException = null;
+
+    foreach ($modes as $mode) {
+        try {
+            $dsn = sprintf("pgsql:host=%s;port=%d;dbname=%s;sslmode=%s", SUPABASE_HOST, SUPABASE_PORT, SUPABASE_DB, $mode);
+            $conn = new \PDO($dsn, SUPABASE_USER, SUPABASE_PASS, [
+                \PDO::ATTR_ERRMODE            => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+                \PDO::ATTR_TIMEOUT            => 6,
+            ]);
+            $pdo = $conn;
+            return $pdo;
+        } catch (\Throwable $e) {
+            $lastException = $e;
+        }
+    }
+
+    throw $lastException ?: new \Exception("Could not connect to Central Supabase DB");
 }
 
 function jsonResponse(array $data, int $code = 200): void {
