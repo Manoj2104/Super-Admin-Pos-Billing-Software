@@ -1,13 +1,13 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /super_admin/
+    RewriteBase /
 
     # Allow direct access to existing files and directories
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
 
     # Route all non-file requests to index.php
-    RewriteRule ^ index.php [L]
+    RewriteRule ^(.*)$ index.php [QSA,L]
 </IfModule>
 
 # Enable CORS headers for standalone deployment
