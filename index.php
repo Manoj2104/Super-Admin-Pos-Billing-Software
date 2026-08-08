@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="favicon.ico">
     <link rel="stylesheet" href="assets/css/style.css">
     <style>
-        body, html { margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #F8FAFC; color: #0F172A; min-height: 100vh; }
+        body, html { margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0F172A; color: #F8FAFC; min-height: 100vh; }
         #root { min-height: 100vh; }
     </style>
 </head>
@@ -15,10 +15,15 @@
     <div id="root"></div>
 
     <script>
-        // Auto-redirect root to /#/super_admin if no hash route is specified
-        if (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#') {
+        // Enforce Standalone Super Admin Route (#/super_admin) so Image 1 Login Page Always Renders
+        if (window.location.hash !== '#/super_admin') {
             window.location.hash = '#/super_admin';
         }
+        window.addEventListener('hashchange', function() {
+            if (window.location.hash !== '#/super_admin' && window.location.hash !== '#/super-admin') {
+                window.location.hash = '#/super_admin';
+            }
+        });
         window.SUPERADMIN_API_BASE = 'api.php?action=';
     </script>
     <script src="assets/js/app.js"></script>
