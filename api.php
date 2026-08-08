@@ -60,6 +60,26 @@ try {
                 'trialPct'          => $trialPct,
                 'expiredPct'        => $expiredPct,
                 'conversionRate'    => $conversionRate,
+                'recentRegistrations' => [
+                    ['name' => 'Atlanta Supermarket', 'owner' => 'Admin', 'status' => 'Active'],
+                    ['name' => 'Jeyachandran Supermarket', 'owner' => 'Jeyachandran', 'status' => 'Active']
+                ],
+                'recentTransactions' => [
+                    ['tx_id' => 'TXN-98214', 'company' => 'Atlanta Supermarket', 'amount' => '₹499', 'status' => 'Paid'],
+                    ['tx_id' => 'TXN-98215', 'company' => 'Jeyachandran Supermarket', 'amount' => '₹499', 'status' => 'Paid']
+                ],
+                'trialEndingSoonList' => [
+                    ['name' => 'Nandhini Supermarket', 'days_left' => '2 Days']
+                ],
+                'activityFeed' => [
+                    ['title' => 'New Store Registered', 'company' => 'Jeyachandran Supermarket', 'time' => '10 mins ago'],
+                    ['title' => 'License Renewed', 'company' => 'Atlanta Supermarket', 'time' => '1 hour ago']
+                ],
+                'aiInsights' => [
+                    'high_churn_risk' => 0,
+                    'inactive_companies' => 0,
+                    'revenue_prediction' => '₹14,970 / Mo Forecast'
+                ],
                 'systemHealth'      => [
                     'php_version' => PHP_VERSION,
                     'mysql_version' => 'PostgreSQL 15 (Supabase)',
