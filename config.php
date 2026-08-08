@@ -12,14 +12,13 @@ define('SUPABASE_PASS', 'Manojnandhini@2104');
 define('SUPABASE_URL',  'https://xzduxvifiancdgnrrgew.supabase.co');
 define('SUPERADMIN_PASS', 'Admin@2026!'); // Master Portal Access Password
 
-function getCloudPdo(): \PDO {
+function getCloudPdo(): ?\PDO {
     static $pdo = null;
     if ($pdo !== null) {
         return $pdo;
     }
 
     $modes = ['require', 'prefer', 'allow', 'disable'];
-    $lastException = null;
 
     foreach ($modes as $mode) {
         try {
@@ -27,16 +26,16 @@ function getCloudPdo(): \PDO {
             $conn = new \PDO($dsn, SUPABASE_USER, SUPABASE_PASS, [
                 \PDO::ATTR_ERRMODE            => \PDO::ERRMODE_EXCEPTION,
                 \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-                \PDO::ATTR_TIMEOUT            => 6,
+                \PDO::ATTR_TIMEOUT            => 5,
             ]);
             $pdo = $conn;
             return $pdo;
         } catch (\Throwable $e) {
-            $lastException = $e;
+            // try next mode
         }
     }
 
-    throw $lastException ?: new \Exception("Could not connect to Central Supabase DB");
+    return null;
 }
 
 function jsonResponse(array $data, int $code = 200): void {
