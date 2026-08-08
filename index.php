@@ -10,22 +10,17 @@
         body, html { margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0F172A; color: #F8FAFC; min-height: 100vh; }
         #root { min-height: 100vh; }
     </style>
+    <script>
+        // Synchronously declare Standalone Super Admin Mode & Set Initial Route
+        window.SUPERADMIN_API_BASE = 'api.php?action=';
+        if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/' || window.location.hash === '#/login') {
+            window.location.hash = '#/super_admin';
+        }
+    </script>
 </head>
 <body>
     <div id="root"></div>
 
-    <script>
-        // Enforce Standalone Super Admin Route (#/super_admin) so Image 1 Login Page Always Renders
-        if (window.location.hash !== '#/super_admin') {
-            window.location.hash = '#/super_admin';
-        }
-        window.addEventListener('hashchange', function() {
-            if (window.location.hash !== '#/super_admin' && window.location.hash !== '#/super-admin') {
-                window.location.hash = '#/super_admin';
-            }
-        });
-        window.SUPERADMIN_API_BASE = 'api.php?action=';
-    </script>
     <script src="assets/js/app.js"></script>
 </body>
 </html>
