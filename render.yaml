@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: infypos-superadmin
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: CENTRAL_SUPABASE_HOST
+        value: db.xzduxvifiancdgnrrgew.supabase.co
+      - key: CENTRAL_SUPABASE_PORT
+        value: "5432"
+      - key: CENTRAL_SUPABASE_DB
+        value: postgres
+      - key: CENTRAL_SUPABASE_USER
+        value: postgres
+      - key: CENTRAL_SUPABASE_PASS
+        value: Manojnandhini@2104
