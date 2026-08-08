@@ -2,6 +2,9 @@
     RewriteEngine On
     RewriteBase /
 
+    # Map /js/* to /assets/js/* if requested by Webpack chunk loader
+    RewriteRule ^js/(.*)$ assets/js/$1 [L]
+
     # Allow direct access to existing files and directories
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d

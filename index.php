@@ -15,6 +15,9 @@
     <div id="root"></div>
 
     <script>
+        // Set Webpack publicPath dynamically for Webpack Chunk loader
+        window.__webpack_public_path__ = 'assets/js/';
+        
         // Enforce Standalone Super Admin Route (#/super_admin) so Image 1 Login Page Always Renders
         if (window.location.hash !== '#/super_admin') {
             window.location.hash = '#/super_admin';
