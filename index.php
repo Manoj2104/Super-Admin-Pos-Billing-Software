@@ -15,7 +15,8 @@
     <div id="root"></div>
 
     <script>
-        // Set Webpack publicPath dynamically for Webpack Chunk loader
+        // Set Standalone Super Admin Flag for 100% direct rendering without Redux or App.js crashes
+        window.SUPERADMIN_STANDALONE = true;
         window.__webpack_public_path__ = 'assets/js/';
         
         // Enforce Standalone Super Admin Route (#/super_admin) so Image 1 Login Page Always Renders
