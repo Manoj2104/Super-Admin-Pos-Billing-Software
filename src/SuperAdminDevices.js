@@ -67,9 +67,13 @@ const SuperAdminDevices = () => {
     const [showDrawer, setShowDrawer] = useState(false);
 
     const loadDevices = async () => {
-        if (devices.length === 0) setLoading(true);
         try {
-            const res = await axios.get('/api/saas-admin/devices');
+            let res;
+            try {
+                res = await axios.get('api.php?action=devices');
+            } catch (e0) {
+                res = await axios.get('/api/saas-admin/devices');
+            }
             if (res.data && res.data.success) {
                 setDevices(res.data.devices || []);
                 try { localStorage.setItem('sa_devices_cache', JSON.stringify(res.data.devices || [])); } catch (e) {}

@@ -17,13 +17,16 @@ const SuperAdminKeys = () => {
     const [copiedKey, setCopiedKey] = useState('');
 
     const loadKeys = async () => {
-        if (keys.length === 0) setLoading(true);
         try {
             let res;
             try {
-                res = await apiConfig.get('saas-admin/keys');
-            } catch (e1) {
-                res = await axios.get('/api/saas-admin/keys');
+                res = await axios.get('api.php?action=keys');
+            } catch (e0) {
+                try {
+                    res = await apiConfig.get('saas-admin/keys');
+                } catch (e1) {
+                    res = await axios.get('/api/saas-admin/keys');
+                }
             }
             if (res && res.data && res.data.success) {
                 setKeys(res.data.keys || []);
@@ -62,9 +65,13 @@ const SuperAdminKeys = () => {
 
             let res;
             try {
-                res = await apiConfig.post('saas-admin/generate-key', payload);
-            } catch (e1) {
-                res = await axios.post('/api/saas-admin/generate-key', payload);
+                res = await axios.post('api.php?action=generate-key', payload);
+            } catch (e0) {
+                try {
+                    res = await apiConfig.post('saas-admin/generate-key', payload);
+                } catch (e1) {
+                    res = await axios.post('/api/saas-admin/generate-key', payload);
+                }
             }
             if (res && res.data && res.data.success) {
                 setNewKeyMsg(res.data);

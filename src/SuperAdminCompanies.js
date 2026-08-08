@@ -93,19 +93,23 @@ const SuperAdminCompanies = () => {
 
     // Load Companies & Stats from Real Backend DB
     const loadData = async () => {
-        if (companies.length === 0) setLoading(true);
         try {
             let compRes, statsRes;
             try {
-                [compRes, statsRes] = await Promise.all([
-                    apiConfig.get('saas-admin/companies'),
-                    apiConfig.get('saas-admin/stats')
-                ]);
-            } catch (e1) {
-                [compRes, statsRes] = await Promise.all([
-                    axios.get('/api/saas-admin/companies'),
-                    axios.get('/api/saas-admin/stats')
-                ]);
+                compRes = await axios.get('api.php?action=companies');
+                statsRes = await axios.get('api.php?action=stats');
+            } catch (e0) {
+                try {
+                    [compRes, statsRes] = await Promise.all([
+                        apiConfig.get('saas-admin/companies'),
+                        apiConfig.get('saas-admin/stats')
+                    ]);
+                } catch (e1) {
+                    [compRes, statsRes] = await Promise.all([
+                        axios.get('/api/saas-admin/companies'),
+                        axios.get('/api/saas-admin/stats')
+                    ]);
+                }
             }
 
             if (compRes && compRes.data && compRes.data.success) {

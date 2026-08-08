@@ -12,12 +12,20 @@ import {
     faChartPie, faArrowUp, faArrowDown, faPrint, faEnvelope, faHistory, faCog
 } from '@fortawesome/free-solid-svg-icons';
 
+const defaultSubStats = {
+    totalCompanies: 2,
+    activeCompanies: 2,
+    trialCompanies: 0,
+    mrr: 998,
+    arr: 11976,
+};
+
 const SuperAdminSubscriptions = ({ onNavigate }) => {
     const [stats, setStats] = useState(() => {
         try {
             const cached = localStorage.getItem('sa_stats_cache');
-            return cached ? JSON.parse(cached) : null;
-        } catch (e) { return null; }
+            return cached ? JSON.parse(cached) : defaultSubStats;
+        } catch (e) { return defaultSubStats; }
     });
     const [companies, setCompanies] = useState(() => {
         try {
@@ -25,7 +33,6 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
             return cached ? JSON.parse(cached) : [];
         } catch (e) { return []; }
     });
-    const [loading, setLoading] = useState(() => !stats || companies.length === 0);
 
     const [searchQuery, setSearchQuery] = useState('');
     const [filterPlan, setFilterPlan] = useState('all');
@@ -51,12 +58,15 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
 
     // Load Data from Backend APIs
     const loadData = async () => {
-        if (!stats || companies.length === 0) setLoading(true);
         try {
-            const [statsRes, compRes] = await Promise.all([
-                axios.get('/api/saas-admin/stats').catch(() => null),
-                axios.get('/api/saas-admin/companies').catch(() => null)
-            ]);
+            let statsRes, compRes;
+            try {
+                statsRes = await axios.get('api.php?action=stats');
+                compRes = await axios.get('api.php?action=companies');
+            } catch (e0) {
+                statsRes = await axios.get('/api/saas-admin/stats').catch(() => null);
+                compRes = await axios.get('/api/saas-admin/companies').catch(() => null);
+            }
 
             if (statsRes && statsRes.data && statsRes.data.success) {
                 setStats(statsRes.data);
@@ -73,8 +83,6 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
             }
         } catch (err) {
             console.warn('SuperAdminSubscriptions load error', err);
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -101,10 +109,18 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
         if (!modifyingComp) return;
         setSubmittingModify(true);
         try {
-            const res = await axios.post('/api/saas-admin/modify-subscription', {
-                company_id: modifyingComp.id,
-                plan_type: selectedPlanType
-            });
+            let res;
+            try {
+                res = await axios.post('api.php?action=modify-subscription', {
+                    company_id: modifyingComp.id,
+                    plan_type: selectedPlanType
+                });
+            } catch (e0) {
+                res = await axios.post('/api/saas-admin/modify-subscription', {
+                    company_id: modifyingComp.id,
+                    plan_type: selectedPlanType
+                });
+            }
 
             if (res.data && res.data.success) {
                 showToast(`Subscription modified successfully! New Key: ${res.data.new_key_code} updated in Client Billing Portal.`);
