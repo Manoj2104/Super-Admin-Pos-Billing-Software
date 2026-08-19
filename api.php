@@ -23,6 +23,17 @@ if (!empty($rawBody)) {
 
 $action = $_GET['action'] ?? $_POST['action'] ?? ($jsonInput['action'] ?? '');
 
+// Robust Request URI Parsing for Apache mod_rewrite / Direct REST URL calls:
+if (empty($action) && isset($_SERVER['REQUEST_URI'])) {
+    $uriPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    if (preg_match('#(?:/api/|api/)(?:saas-admin/)?([^/]+)(?:/([^/]+))?#i', $uriPath, $matches)) {
+        $action = $matches[1];
+        if (!empty($matches[2]) && empty($_GET['id'])) {
+            $_GET['id'] = $matches[2];
+        }
+    }
+}
+
 try {
     $pdo = getCloudPdo();
 
