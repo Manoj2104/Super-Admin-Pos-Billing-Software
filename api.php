@@ -206,8 +206,6 @@ try {
             ]);
             break;
 
-            break;
-
         // ──────────────────────────────────────────────────────────
         // 5. MODIFY SUBSCRIPTION PLAN
         // ──────────────────────────────────────────────────────────
@@ -215,18 +213,6 @@ try {
             $input = array_merge($_POST, $jsonInput);
             $companyId = (int) ($input['company_id'] ?? 1);
             $planType  = $input['plan_type'] ?? 'monthly_30';
-
-            $companyName = 'Customer Store';
-            if ($pdo) {
-                try {
-                    $stmt = $pdo->prepare("SELECT * FROM companies WHERE id = ? LIMIT 1");
-                    $stmt->execute([$companyId]);
-                    $company = $stmt->fetch();
-                    if ($company) {
-                        $companyName = $company['name'];
-                    }
-                } catch (\Throwable $ex) {}
-            }
 
             $newEnds = date('Y-m-d H:i:s', strtotime('+30 days'));
             $planName = 'INFY-POS PREMIUM';
@@ -252,25 +238,28 @@ try {
 
             $newKeyCode = 'INFYPOS-2026-KEY-' . strtoupper(substr(md5(uniqid() . $companyId . time()), 0, 8));
 
-            if ($pdo) {
-                try {
-                    $updStmt = $pdo->prepare("UPDATE companies SET status = ?, trial_ends_at = ?, subscription_ends_at = ?, updated_at = NOW() WHERE id = ?");
-                    $updStmt->execute([$status, $newEnds, $newEnds, $companyId]);
+            supabaseRest('/companies?id=eq.' . $companyId, 'PATCH', [
+                'status'               => $status,
+                'trial_ends_at'        => date('c', strtotime($newEnds)),
+                'subscription_ends_at' => date('c', strtotime($newEnds)),
+                'updated_at'           => date('c'),
+            ]);
 
-                    $delStmt = $pdo->prepare("DELETE FROM activation_keys WHERE company_id = ? AND key_code != 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS'");
-                    $delStmt->execute([$companyId]);
-
-                    $insStmt = $pdo->prepare("
-                        INSERT INTO activation_keys (key_code, company_id, plan_name, price, status, activated_at, expires_at, created_at, updated_at) 
-                        VALUES (?, ?, ?, 0.00, 'active', NOW(), ?, NOW(), NOW())
-                    ");
-                    $insStmt->execute([$newKeyCode, $companyId, $planName, $newEnds]);
-                } catch (\Throwable $subEx) {}
-            }
+            supabaseRest('/activation_keys', 'POST', [
+                'key_code'     => $newKeyCode,
+                'company_id'   => $companyId,
+                'plan_name'    => $planName,
+                'price'        => 0.00,
+                'status'       => 'active',
+                'activated_at' => date('c'),
+                'expires_at'   => date('c', strtotime($newEnds)),
+                'created_at'   => date('c'),
+                'updated_at'   => date('c'),
+            ]);
 
             jsonResponse([
                 'success'      => true,
-                'message'      => "Subscription Plan for '{$companyName}' successfully modified to '{$planName}'! New Key '{$newKeyCode}' generated.",
+                'message'      => "Subscription Plan successfully modified to '{$planName}'! New Key '{$newKeyCode}' generated.",
                 'new_key_code' => $newKeyCode,
                 'expires_at'   => date('d M Y', strtotime($newEnds)),
             ]);
@@ -280,57 +269,29 @@ try {
         // 6. CONNECTED DEVICES
         // ──────────────────────────────────────────────────────────
         case 'devices':
-            $rows = [];
-            if ($pdo) {
-                try {
-                    $stmt = $pdo->query("SELECT d.*, c.name as company_name, c.owner_name FROM saas_devices d LEFT JOIN companies c ON d.company_id = c.id ORDER BY d.id DESC");
-                    $rows = $stmt->fetchAll();
-                } catch (\Throwable $t) {}
-            }
+            $devResp = supabaseRest('/saas_devices?select=*&order=id.desc');
+            $rows = ($devResp['success'] && is_array($devResp['data'])) ? $devResp['data'] : [];
 
-            if (empty($rows)) {
-                $devices = [
-                    [
-                        'id'            => 1,
-                        'device_name'   => 'POS Terminal Primary',
-                        'machine_uuid'  => 'UUID-F20C2F89B22B2990',
-                        'full_uuid'     => 'UUID-F20C2F89B22B2990-883A',
-                        'os_version'    => 'Windows 11 Enterprise x64 (Build 22631)',
-                        'ip_address'    => '127.0.0.1 (Local Host)',
-                        'mac_address'   => '00:1A:2B:3C:4D:5E',
-                        'company_name'  => 'Atlanta Supermarket',
-                        'owner_name'    => 'Admin',
-                        'ram_size'      => '16 GB DDR5',
-                        'cpu_model'     => 'Intel Core i7-13700H @ 3.40GHz',
-                        'storage_info'  => '512 GB NVMe SSD',
-                        'app_version'   => 'v2.4.0 Super Admin Engine',
-                        'last_seen'     => date('d M Y, h:i A'),
-                        'status'        => 'Online',
-                        'is_blocked'    => false,
-                    ]
+            $devices = array_map(function ($row) {
+                return [
+                    'id'            => $row['id'],
+                    'device_name'   => $row['device_name'] ?? (gethostname() . ' Terminal'),
+                    'machine_uuid'  => !empty($row['machine_uuid']) ? 'UUID-' . strtoupper(substr($row['machine_uuid'], 0, 16)) : 'UUID-F20C2F89B22B2990',
+                    'full_uuid'     => $row['machine_uuid'] ?? 'UUID-F20C2F89B22B2990',
+                    'os_version'    => $row['os_version'] ?? 'Windows 11 x64',
+                    'ip_address'    => $row['ip_address'] ?? '127.0.0.1',
+                    'mac_address'   => $row['mac_address'] ?? '00:1A:2B:3C:4D:5E',
+                    'company_name'  => !empty($row['company_name']) ? $row['company_name'] : 'Store POS',
+                    'owner_name'    => !empty($row['owner_name']) ? $row['owner_name'] : 'Admin',
+                    'ram_size'      => '16 GB DDR5',
+                    'cpu_model'     => 'Intel Core i7',
+                    'storage_info'  => '512 GB SSD',
+                    'app_version'   => 'v2.4.0',
+                    'last_seen'     => !empty($row['updated_at']) ? date('d M Y, h:i A', strtotime($row['updated_at'])) : date('d M Y, h:i A'),
+                    'status'        => $row['status'] ?? 'Online',
+                    'is_blocked'    => false,
                 ];
-            } else {
-                $devices = array_map(function ($row) {
-                    return [
-                        'id'            => $row['id'],
-                        'device_name'   => $row['device_name'] ?? (gethostname() . ' Terminal'),
-                        'machine_uuid'  => !empty($row['machine_uuid']) ? 'UUID-' . strtoupper(substr($row['machine_uuid'], 0, 16)) : 'UUID-F20C2F89B22B2990',
-                        'full_uuid'     => $row['machine_uuid'] ?? 'UUID-F20C2F89B22B2990',
-                        'os_version'    => $row['os_version'] ?? 'Windows 11 x64',
-                        'ip_address'    => $row['ip_address'] ?? '127.0.0.1',
-                        'mac_address'   => $row['mac_address'] ?? '00:1A:2B:3C:4D:5E',
-                        'company_name'  => !empty($row['company_name']) ? $row['company_name'] : 'Atlanta Supermarket',
-                        'owner_name'    => !empty($row['owner_name']) ? $row['owner_name'] : 'Admin',
-                        'ram_size'      => '16 GB DDR5',
-                        'cpu_model'     => 'Intel Core i7',
-                        'storage_info'  => '512 GB SSD',
-                        'app_version'   => 'v2.4.0',
-                        'last_seen'     => !empty($row['updated_at']) ? date('d M Y, h:i A', strtotime($row['updated_at'])) : date('d M Y, h:i A'),
-                        'status'        => $row['status'] ?? 'Online',
-                        'is_blocked'    => false,
-                    ];
-                }, $rows);
-            }
+            }, $rows);
 
             jsonResponse([
                 'success' => true,
@@ -345,6 +306,7 @@ try {
             break;
 
         default:
+
             // Always return a clean JSON response for unknown actions instead of throwing 400
             jsonResponse([
                 'success' => true,
