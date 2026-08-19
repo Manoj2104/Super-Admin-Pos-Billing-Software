@@ -112,7 +112,30 @@ try {
             $compResp = supabaseRest('/companies?select=*&order=id.desc');
             $rows = ($compResp['success'] && is_array($compResp['data'])) ? $compResp['data'] : [];
 
-            $companies = array_map(function ($comp) {
+            $allKeysResp = supabaseRest('/activation_keys?select=*&order=id.desc');
+            $allKeys = ($allKeysResp['success'] && is_array($allKeysResp['data'])) ? $allKeysResp['data'] : [];
+
+            // Index keys by company_id
+            $keysByComp = [];
+            foreach ($allKeys as $k) {
+                if (!empty($k['company_id']) && !isset($keysByComp[$k['company_id']])) {
+                    $keysByComp[$k['company_id']] = $k;
+                }
+            }
+
+            $companies = array_map(function ($comp) use ($keysByComp) {
+                $compId = $comp['id'] ?? 0;
+                $keyObj = $keysByComp[$compId] ?? null;
+                $keyCode = $keyObj['key_code'] ?? 'INFYPOS-2026-KEY-97A4F5E2';
+                $planName = $keyObj['plan_name'] ?? (($comp['status'] ?? '') === 'active' ? 'INFY-POS PREMIUM (₹499/mo)' : 'INFY-POS FREE TRIAL');
+
+                $endsAt = $comp['subscription_ends_at'] ?? ($comp['trial_ends_at'] ?? null);
+                $daysRemaining = 0;
+                if (!empty($endsAt)) {
+                    $diff = (strtotime($endsAt) - time()) / 86400;
+                    $daysRemaining = max(0, (int) round($diff));
+                }
+
                 return [
                     'id'                  => $comp['id'],
                     'name'                => $comp['name'] ?? 'Store',
@@ -123,11 +146,11 @@ try {
                     'gst_number'          => $comp['gst_number'] ?? '33AABCU9603R1ZM',
                     'country'             => 'India',
                     'status'              => $comp['status'] ?? 'active',
-                    'days_remaining'      => 14,
+                    'days_remaining'      => $daysRemaining,
                     'trial_ends_at'       => !empty($comp['trial_ends_at']) ? date('d M Y', strtotime($comp['trial_ends_at'])) : 'N/A',
                     'subscription_ends_at'=> !empty($comp['subscription_ends_at']) ? date('d M Y', strtotime($comp['subscription_ends_at'])) : 'N/A',
-                    'key_code'            => 'INFYPOS-2026-FREE-TRIAL',
-                    'plan_name'           => ($comp['status'] ?? '') === 'active' ? 'INFY-POS PREMIUM (₹499/mo)' : 'INFY-POS FREE TRIAL',
+                    'key_code'            => $keyCode,
+                    'plan_name'           => $planName,
                     'price'               => ($comp['status'] ?? '') === 'active' ? '₹499 /mo' : 'Free Trial (₹0)',
                     'mrr_amount'          => ($comp['status'] ?? '') === 'active' ? '₹499' : '₹0',
                     'created_at'          => !empty($comp['created_at']) ? date('d M Y, H:i', strtotime($comp['created_at'])) : 'N/A',
@@ -148,13 +171,27 @@ try {
             $keyResp = supabaseRest('/activation_keys?select=*&order=id.desc');
             $rows = ($keyResp['success'] && is_array($keyResp['data'])) ? $keyResp['data'] : [];
 
-            $keys = array_map(function ($key) {
+            $compResp = supabaseRest('/companies?select=*');
+            $companies = ($compResp['success'] && is_array($compResp['data'])) ? $compResp['data'] : [];
+            $compMap = [];
+            foreach ($companies as $c) {
+                $compMap[$c['id']] = $c['name'] ?? 'Client Store';
+            }
+
+            $keys = array_map(function ($key) use ($compMap) {
                 $isGlobal = ($key['key_code'] === 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS');
+                $companyName = 'Unassigned (Standby)';
+                if ($isGlobal) {
+                    $companyName = '🌐 Universal (All Clients Allowed)';
+                } else if (!empty($key['company_id']) && isset($compMap[$key['company_id']])) {
+                    $companyName = $compMap[$key['company_id']];
+                }
+
                 return [
                     'id'           => $key['id'],
                     'key_code'     => $key['key_code'],
                     'status'       => $isGlobal ? 'active' : ($key['status'] ?? 'active'),
-                    'company_name' => $isGlobal ? '🌐 Universal (All Clients Allowed)' : (!empty($key['company_name']) ? $key['company_name'] : 'Unassigned (Standby)'),
+                    'company_name' => $companyName,
                     'plan_name'    => $key['plan_name'] ?? 'INFY-POS PREMIUM (₹499/mo)',
                     'expires_at'   => $isGlobal ? 'Unlimited / Permanent' : (!empty($key['expires_at']) ? date('d M Y', strtotime($key['expires_at'])) : 'Never'),
                     'created_at'   => !empty($key['created_at']) ? date('d M Y', strtotime($key['created_at'])) : 'N/A',
@@ -163,6 +200,7 @@ try {
 
             jsonResponse(['success' => true, 'keys' => $keys]);
             break;
+
 
         // ──────────────────────────────────────────────────────────
         // 4. GENERATE ACTIVATION KEY
