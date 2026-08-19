@@ -164,6 +164,17 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
                     return updated;
                 });
 
+                // Optimistically update local audit logs
+                const newAuditLog = {
+                    id: Date.now(),
+                    timestamp: new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+                    action: 'Super Admin Manual Plan Override',
+                    description: `Modified plan for '${modifyingComp.name}' to ${newPlanName}. Generated New Key: ${newKey}`,
+                    details: `Modified plan for '${modifyingComp.name}' to ${newPlanName}. Generated New Key: ${newKey}`,
+                    admin_by: 'Manoj S (Super Admin)'
+                };
+                setOverrideLogs(prev => [newAuditLog, ...prev]);
+
                 showToast(`Subscription modified successfully! New Key: ${newKey} updated in Client Billing Portal.`);
                 setShowModifyModal(false);
                 setModifyingComp(null);

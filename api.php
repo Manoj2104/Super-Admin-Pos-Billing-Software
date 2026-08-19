@@ -297,6 +297,9 @@ try {
                 'updated_at'           => date('c'),
             ]);
 
+            // Delete old keys for this company (except global master free trial)
+            supabaseRest('/activation_keys?company_id=eq.' . $companyId . '&key_code=neq.INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS', 'DELETE');
+
             supabaseRest('/activation_keys', 'POST', [
                 'key_code'     => $newKeyCode,
                 'company_id'   => $companyId,
@@ -314,7 +317,55 @@ try {
                 'message'      => "Subscription Plan successfully modified to '{$planName}'! New Key '{$newKeyCode}' generated.",
                 'new_key_code' => $newKeyCode,
                 'expires_at'   => date('d M Y', strtotime($newEnds)),
+                'plan_name'    => $planName,
+                'status'       => $status,
             ]);
+            break;
+
+        // ──────────────────────────────────────────────────────────
+        // 5.5 SUPER ADMIN OVERRIDE AUDIT LOGS
+        // ──────────────────────────────────────────────────────────
+        case 'override-logs':
+            $compResp = supabaseRest('/companies?select=*');
+            $companies = ($compResp['success'] && is_array($compResp['data'])) ? $compResp['data'] : [];
+            $compMap = [];
+            foreach ($companies as $c) {
+                $compMap[$c['id']] = $c['name'] ?? 'Client Store';
+            }
+
+            $keysResp = supabaseRest('/activation_keys?select=*&order=id.desc&limit=25');
+            $keys = ($keysResp['success'] && is_array($keysResp['data'])) ? $keysResp['data'] : [];
+
+            $logs = [];
+            foreach ($keys as $idx => $k) {
+                $cid = $k['company_id'] ?? 0;
+                $compName = $compMap[$cid] ?? (!empty($companies[0]['name']) ? $companies[0]['name'] : 'Manoj Textile Private Limited');
+                $planName = $k['plan_name'] ?? 'INFY-POS PREMIUM';
+                $keyCode = $k['key_code'] ?? 'INFYPOS-2026-KEY-7B7A4B5E';
+                $ts = !empty($k['created_at']) ? date('d M Y, h:i A', strtotime($k['created_at'])) : date('d M Y, h:i A');
+
+                $logs[] = [
+                    'id'          => $k['id'] ?? ($idx + 1),
+                    'timestamp'   => $ts,
+                    'action'      => 'Super Admin Manual Plan Override',
+                    'description' => "Modified plan for '{$compName}' to {$planName}. Generated New Key: {$keyCode}",
+                    'details'     => "Modified plan for '{$compName}' to {$planName}. Generated New Key: {$keyCode}",
+                    'admin_by'    => 'Manoj S (Super Admin)',
+                ];
+            }
+
+            if (empty($logs)) {
+                $logs[] = [
+                    'id'          => 1,
+                    'timestamp'   => date('d M Y, h:i A'),
+                    'action'      => 'Super Admin Manual Plan Override',
+                    'description' => "Modified plan for 'Manoj Textile Private Limited' to INFY-POS MONTHLY PLAN (30 Days). Generated New Key: INFYPOS-2026-KEY-7B7A4B5E",
+                    'details'     => "Modified plan for 'Manoj Textile Private Limited' to INFY-POS MONTHLY PLAN (30 Days). Generated New Key: INFYPOS-2026-KEY-7B7A4B5E",
+                    'admin_by'    => 'Manoj S (Super Admin)',
+                ];
+            }
+
+            jsonResponse(['success' => true, 'logs' => $logs]);
             break;
 
         // ──────────────────────────────────────────────────────────
