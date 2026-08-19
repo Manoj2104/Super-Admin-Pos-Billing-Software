@@ -2,7 +2,11 @@
     RewriteEngine On
     RewriteBase /
 
-    # Route /api/saas-admin/:action to api.php?action=:action
+    # Route /api/saas-admin/:action/:id -> api.php?action=:action&id=:id
+    RewriteRule ^api/saas-admin/([^/]+)/([^/]+)/?$ api.php?action=$1&id=$2 [QSA,L]
+    RewriteRule ^api/([^/]+)/([^/]+)/?$ api.php?action=$1&id=$2 [QSA,L]
+
+    # Route /api/saas-admin/:action -> api.php?action=:action
     RewriteRule ^api/saas-admin/([^/]+)/?$ api.php?action=$1 [QSA,L]
     RewriteRule ^api/([^/]+)/?$ api.php?action=$1 [QSA,L]
 
@@ -20,4 +24,5 @@
     Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE, PUT"
     Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
 </IfModule>
+
 

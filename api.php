@@ -343,6 +343,107 @@ try {
             ]);
             break;
 
+        // ──────────────────────────────────────────────────────────
+        // 7. REVOKE ACTIVATION KEY
+        // ──────────────────────────────────────────────────────────
+        case 'revoke-key':
+            $input = array_merge($_POST, $jsonInput);
+            $keyId = (int) ($_GET['id'] ?? $input['id'] ?? 0);
+
+            if ($keyId > 0) {
+                // Fetch key to check company
+                $kResp = supabaseRest('/activation_keys?id=eq.' . $keyId . '&limit=1');
+                if (!empty($kResp['data'][0])) {
+                    $keyRec = $kResp['data'][0];
+                    supabaseRest('/activation_keys?id=eq.' . $keyId, 'PATCH', [
+                        'status'     => 'revoked',
+                        'updated_at' => date('c'),
+                    ]);
+
+                    if (!empty($keyRec['company_id'])) {
+                        supabaseRest('/companies?id=eq.' . $keyRec['company_id'], 'PATCH', [
+                            'status'     => 'locked',
+                            'updated_at' => date('c'),
+                        ]);
+                    }
+                }
+            }
+
+            jsonResponse([
+                'success' => true,
+                'message' => 'Activation Key revoked successfully. Connected company locked.',
+            ]);
+            break;
+
+        // ──────────────────────────────────────────────────────────
+        // 8. EXPIRE ACTIVATION KEY
+        // ──────────────────────────────────────────────────────────
+        case 'expire-key':
+            $input = array_merge($_POST, $jsonInput);
+            $keyId = (int) ($_GET['id'] ?? $input['id'] ?? 0);
+            $yesterday = date('c', strtotime('-1 day'));
+
+            if ($keyId > 0) {
+                $kResp = supabaseRest('/activation_keys?id=eq.' . $keyId . '&limit=1');
+                if (!empty($kResp['data'][0])) {
+                    $keyRec = $kResp['data'][0];
+                    supabaseRest('/activation_keys?id=eq.' . $keyId, 'PATCH', [
+                        'status'     => 'expired',
+                        'expires_at' => $yesterday,
+                        'updated_at' => date('c'),
+                    ]);
+
+                    if (!empty($keyRec['company_id'])) {
+                        supabaseRest('/companies?id=eq.' . $keyRec['company_id'], 'PATCH', [
+                            'status'               => 'expired',
+                            'subscription_ends_at' => $yesterday,
+                            'updated_at'           => date('c'),
+                        ]);
+                    }
+                }
+            }
+
+            jsonResponse([
+                'success' => true,
+                'message' => 'Activation Key and Company subscription expired immediately.',
+            ]);
+            break;
+
+        // ──────────────────────────────────────────────────────────
+        // 9. DELETE ACTIVATION KEY
+        // ──────────────────────────────────────────────────────────
+        case 'key':
+        case 'delete-key':
+            $input = array_merge($_POST, $jsonInput);
+            $keyId = (int) ($_GET['id'] ?? $input['id'] ?? 0);
+
+            if ($keyId > 0) {
+                supabaseRest('/activation_keys?id=eq.' . $keyId, 'DELETE');
+            }
+
+            jsonResponse([
+                'success' => true,
+                'message' => 'Activation Key deleted permanently from Cloud Database.',
+            ]);
+            break;
+
+        // ──────────────────────────────────────────────────────────
+        // 10. UNBIND DEVICE
+        // ──────────────────────────────────────────────────────────
+        case 'unbind-device':
+            $input = array_merge($_POST, $jsonInput);
+            $devId = (int) ($_GET['id'] ?? $input['id'] ?? 0);
+
+            if ($devId > 0) {
+                supabaseRest('/saas_devices?id=eq.' . $devId, 'DELETE');
+            }
+
+            jsonResponse([
+                'success' => true,
+                'message' => 'Device unbind successful. Terminal released.',
+            ]);
+            break;
+
         default:
 
             // Always return a clean JSON response for unknown actions instead of throwing 400
