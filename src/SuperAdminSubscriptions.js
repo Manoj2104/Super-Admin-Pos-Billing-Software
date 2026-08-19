@@ -121,20 +121,27 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
         try {
             let res = null;
             try {
-                res = await axios.post('/api/saas-admin/modify-subscription', {
+                res = await axios.post('api.php?action=modify-subscription', {
                     company_id: modifyingComp.id,
                     plan_type: selectedPlanType
                 });
             } catch (e0) {
-                res = await axios.post('super_admin/api.php?action=modify-subscription', {
-                    company_id: modifyingComp.id,
-                    plan_type: selectedPlanType
-                });
+                try {
+                    res = await axios.post('/api/saas-admin/modify-subscription', {
+                        company_id: modifyingComp.id,
+                        plan_type: selectedPlanType
+                    });
+                } catch (e1) {
+                    res = await axios.post('super_admin/api.php?action=modify-subscription', {
+                        company_id: modifyingComp.id,
+                        plan_type: selectedPlanType
+                    }).catch(() => null);
+                }
             }
 
             if (res && res.data && res.data.success) {
                 const newKey = res.data.new_key_code || 'INFYPOS-2026-KEY-UPDATED';
-                const newPlanName = selectedPlanType === 'trial_14' ? 'INFY-POS FREE TRIAL (14 Days)' : 'INFY-POS PREMIUM (Monthly)';
+                const newPlanName = selectedPlanType === 'trial_14' ? 'INFY-POS FREE TRIAL (14 Days)' : 'INFY-POS MONTHLY PLAN (30 Days)';
                 const newStatus = selectedPlanType === 'trial_14' ? 'trial' : 'active';
 
                 // Optimistically update local company list

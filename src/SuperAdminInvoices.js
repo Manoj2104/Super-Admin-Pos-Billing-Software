@@ -78,9 +78,13 @@ const SuperAdminInvoices = () => {
         try {
             let res = null;
             try {
-                res = await axios.get('/api/saas-admin/invoices-list');
+                res = await axios.get('api.php?action=invoices-list');
             } catch (e0) {
-                res = await axios.get('super_admin/api.php?action=invoices-list').catch(() => null);
+                try {
+                    res = await axios.get('/api/saas-admin/invoices-list');
+                } catch (e1) {
+                    res = await axios.get('super_admin/api.php?action=invoices-list').catch(() => null);
+                }
             }
 
             if (isMounted) {

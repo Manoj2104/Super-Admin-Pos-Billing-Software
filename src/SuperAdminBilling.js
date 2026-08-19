@@ -81,9 +81,13 @@ const SuperAdminBilling = () => {
         try {
             let res = null;
             try {
-                res = await axios.get('/api/saas-admin/billing-payments');
+                res = await axios.get('api.php?action=billing-payments');
             } catch (e0) {
-                res = await axios.get('super_admin/api.php?action=billing-payments').catch(() => null);
+                try {
+                    res = await axios.get('/api/saas-admin/billing-payments');
+                } catch (e1) {
+                    res = await axios.get('super_admin/api.php?action=billing-payments').catch(() => null);
+                }
             }
 
             if (isMounted) {
