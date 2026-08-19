@@ -34,6 +34,7 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
         } catch (e) { return []; }
     });
 
+    const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterPlan, setFilterPlan] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -57,37 +58,45 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
     const [autoRenewMap, setAutoRenewMap] = useState({});
 
     // Load Data from Backend APIs
-    const loadData = async () => {
+    const loadData = async (isMounted = true) => {
+        setLoading(true);
         try {
-            let statsRes, compRes;
-            try {
-                statsRes = await axios.get('api.php?action=stats');
-                compRes = await axios.get('api.php?action=companies');
-            } catch (e0) {
-                statsRes = await axios.get('/api/saas-admin/stats').catch(() => null);
-                compRes = await axios.get('/api/saas-admin/companies').catch(() => null);
-            }
+            const [statsRes, compRes, logsRes] = await Promise.all([
+                axios.get('/api/saas-admin/stats').catch(() => null),
+                axios.get('/api/saas-admin/companies').catch(() => null),
+                axios.get('/api/saas-admin/override-logs').catch(() => null)
+            ]);
+
+            if (!isMounted) return;
 
             if (statsRes && statsRes.data && statsRes.data.success) {
                 setStats(statsRes.data);
                 try { localStorage.setItem('sa_stats_cache', JSON.stringify(statsRes.data)); } catch (e) {}
             }
             if (compRes && compRes.data && compRes.data.success) {
-                setCompanies(compRes.data.companies || []);
-                try { localStorage.setItem('sa_companies_cache', JSON.stringify(compRes.data.companies || [])); } catch (e) {}
+                const compList = compRes.data.companies || [];
+                setCompanies(compList);
+                try { localStorage.setItem('sa_companies_cache', JSON.stringify(compList)); } catch (e) {}
                 const initialMap = {};
-                (compRes.data.companies || []).forEach(c => {
+                compList.forEach(c => {
                     initialMap[c.id] = c.status === 'active';
                 });
                 setAutoRenewMap(initialMap);
             }
+            if (logsRes && logsRes.data && logsRes.data.success) {
+                setOverrideLogs(logsRes.data.logs || []);
+            }
         } catch (err) {
             console.warn('SuperAdminSubscriptions load error', err);
+        } finally {
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadData();
+        let isMounted = true;
+        loadData(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     const showToast = (msg) => {
@@ -109,24 +118,16 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
         if (!modifyingComp) return;
         setSubmittingModify(true);
         try {
-            let res;
-            try {
-                res = await axios.post('api.php?action=modify-subscription', {
-                    company_id: modifyingComp.id,
-                    plan_type: selectedPlanType
-                });
-            } catch (e0) {
-                res = await axios.post('/api/saas-admin/modify-subscription', {
-                    company_id: modifyingComp.id,
-                    plan_type: selectedPlanType
-                });
-            }
+            const res = await axios.post('/api/saas-admin/modify-subscription', {
+                company_id: modifyingComp.id,
+                plan_type: selectedPlanType
+            });
 
             if (res.data && res.data.success) {
                 showToast(`Subscription modified successfully! New Key: ${res.data.new_key_code} updated in Client Billing Portal.`);
                 setShowModifyModal(false);
                 setModifyingComp(null);
-                loadData();
+                loadData(true);
             } else {
                 alert('Modify failed: ' + (res.data.error || res.data.message));
             }

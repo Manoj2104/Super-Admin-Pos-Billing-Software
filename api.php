@@ -31,25 +31,19 @@ try {
         // 1. STATS & ANALYTICS
         // ──────────────────────────────────────────────────────────
         case 'stats':
-            $totalCompanies     = 2;
-            $activeCompanies    = 2;
-            $trialCompanies     = 0;
-            $expiredCompanies   = 0;
-            $graceCompanies     = 0;
-            $todayRegistrations = 2;
-            $devicesCount       = 1;
+            $compResp = supabaseRest('/companies?select=*');
+            $companies = ($compResp['success'] && is_array($compResp['data'])) ? $compResp['data'] : [];
 
-            if ($pdo) {
-                try {
-                    $totalCompanies     = (int) $pdo->query("SELECT COUNT(*) FROM companies")->fetchColumn();
-                    $activeCompanies    = (int) $pdo->query("SELECT COUNT(*) FROM companies WHERE status = 'active'")->fetchColumn();
-                    $trialCompanies     = (int) $pdo->query("SELECT COUNT(*) FROM companies WHERE status = 'trial'")->fetchColumn();
-                    $expiredCompanies   = (int) $pdo->query("SELECT COUNT(*) FROM companies WHERE status = 'expired'")->fetchColumn();
-                    $graceCompanies     = (int) $pdo->query("SELECT COUNT(*) FROM companies WHERE status = 'grace_period'")->fetchColumn();
-                    $todayRegistrations = (int) $pdo->query("SELECT COUNT(*) FROM companies WHERE DATE(created_at) = CURRENT_DATE")->fetchColumn();
-                    $devicesCount       = (int) $pdo->query("SELECT COUNT(*) FROM saas_devices")->fetchColumn();
-                } catch (\Throwable $ex) {}
-            }
+            $totalCompanies     = count($companies);
+            $activeCompanies    = count(array_filter($companies, fn($c) => ($c['status'] ?? '') === 'active'));
+            $trialCompanies     = count(array_filter($companies, fn($c) => ($c['status'] ?? '') === 'trial'));
+            $expiredCompanies   = count(array_filter($companies, fn($c) => ($c['status'] ?? '') === 'expired'));
+            $graceCompanies     = count(array_filter($companies, fn($c) => ($c['status'] ?? '') === 'grace_period'));
+            $todayRegistrations = count(array_filter($companies, fn($c) => !empty($c['created_at']) && str_starts_with($c['created_at'], date('Y-m-d'))));
+
+            $devResp = supabaseRest('/saas_devices?select=*');
+            $devices = ($devResp['success'] && is_array($devResp['data'])) ? $devResp['data'] : [];
+            $devicesCount = count($devices);
 
             $mrr          = $activeCompanies * 499.00;
             $arr          = $mrr * 12;
@@ -115,64 +109,34 @@ try {
         // 2. COMPANIES LIST
         // ──────────────────────────────────────────────────────────
         case 'companies':
-            $rows = [];
-            if ($pdo) {
-                try {
-                    $stmt = $pdo->query("SELECT * FROM companies ORDER BY id DESC");
-                    $rows = $stmt->fetchAll();
-                } catch (\Throwable $ex) {}
-            }
+            $compResp = supabaseRest('/companies?select=*&order=id.desc');
+            $rows = ($compResp['success'] && is_array($compResp['data'])) ? $compResp['data'] : [];
 
-            if (empty($rows)) {
-                $companies = [
-                    [
-                        'id' => 1, 'name' => 'Atlanta Supermarket', 'owner_name' => 'Admin', 'email' => 'admin@infypos.com', 'phone' => '9876543210', 'business_type' => 'Supermarket', 'gst_number' => '33AABCU9603R1ZM', 'country' => 'India', 'status' => 'active', 'days_remaining' => 14, 'trial_ends_at' => date('d M Y', strtotime('+14 days')), 'subscription_ends_at' => date('d M Y', strtotime('+365 days')), 'key_code' => 'INFYPOS-2026-75CF-D403', 'plan_name' => 'INFY-POS PREMIUM', 'price' => '₹499 /mo', 'mrr_amount' => '₹499', 'created_at' => date('d M Y, H:i'), 'users_count' => 1, 'products_count' => 125, 'warehouses_count' => 1, 'storage_used' => '42.5 MB'
-                    ],
-                    [
-                        'id' => 2, 'name' => 'Jeyachandran Supermarket', 'owner_name' => 'Jeyachandran', 'email' => 'jeyachandran@pos.com', 'phone' => '9876543211', 'business_type' => 'Supermarket', 'gst_number' => '33AABCU9603R1ZN', 'country' => 'India', 'status' => 'active', 'days_remaining' => 14, 'trial_ends_at' => date('d M Y', strtotime('+14 days')), 'subscription_ends_at' => date('d M Y', strtotime('+365 days')), 'key_code' => 'INFYPOS-2026-DEE2-5186', 'plan_name' => 'INFY-POS PREMIUM', 'price' => '₹499 /mo', 'mrr_amount' => '₹499', 'created_at' => date('d M Y, H:i'), 'users_count' => 1, 'products_count' => 125, 'warehouses_count' => 1, 'storage_used' => '42.5 MB'
-                    ]
+            $companies = array_map(function ($comp) {
+                return [
+                    'id'                  => $comp['id'],
+                    'name'                => $comp['name'] ?? 'Store',
+                    'owner_name'          => !empty($comp['owner_name']) ? $comp['owner_name'] : 'Store Owner',
+                    'email'               => $comp['email'] ?? '',
+                    'phone'               => !empty($comp['phone']) ? $comp['phone'] : '9876543210',
+                    'business_type'       => !empty($comp['business_type']) ? $comp['business_type'] : 'Supermarket',
+                    'gst_number'          => $comp['gst_number'] ?? '33AABCU9603R1ZM',
+                    'country'             => 'India',
+                    'status'              => $comp['status'] ?? 'active',
+                    'days_remaining'      => 14,
+                    'trial_ends_at'       => !empty($comp['trial_ends_at']) ? date('d M Y', strtotime($comp['trial_ends_at'])) : 'N/A',
+                    'subscription_ends_at'=> !empty($comp['subscription_ends_at']) ? date('d M Y', strtotime($comp['subscription_ends_at'])) : 'N/A',
+                    'key_code'            => 'INFYPOS-2026-FREE-TRIAL',
+                    'plan_name'           => ($comp['status'] ?? '') === 'active' ? 'INFY-POS PREMIUM (₹499/mo)' : 'INFY-POS FREE TRIAL',
+                    'price'               => ($comp['status'] ?? '') === 'active' ? '₹499 /mo' : 'Free Trial (₹0)',
+                    'mrr_amount'          => ($comp['status'] ?? '') === 'active' ? '₹499' : '₹0',
+                    'created_at'          => !empty($comp['created_at']) ? date('d M Y, H:i', strtotime($comp['created_at'])) : 'N/A',
+                    'users_count'         => 1,
+                    'products_count'      => 125,
+                    'warehouses_count'    => 1,
+                    'storage_used'        => '42.5 MB',
                 ];
-            } else {
-                $companies = array_map(function ($comp) use ($pdo) {
-                    $keyCode = 'INFYPOS-2026-FREE-TRIAL';
-                    $planName = 'INFY-POS PREMIUM';
-                    if ($pdo) {
-                        try {
-                            $kStmt = $pdo->prepare("SELECT * FROM activation_keys WHERE company_id = ? ORDER BY id DESC LIMIT 1");
-                            $kStmt->execute([$comp['id']]);
-                            $latestKey = $kStmt->fetch();
-                            if ($latestKey) {
-                                $keyCode  = $latestKey['key_code'];
-                                $planName = $latestKey['plan_name'] ?? 'INFY-POS PREMIUM';
-                            }
-                        } catch (\Throwable $kEx) {}
-                    }
-
-                    return [
-                        'id'                  => $comp['id'],
-                        'name'                => $comp['name'],
-                        'owner_name'          => !empty($comp['owner_name']) ? $comp['owner_name'] : 'Store Owner',
-                        'email'               => $comp['email'],
-                        'phone'               => !empty($comp['phone']) ? $comp['phone'] : '9876543210',
-                        'business_type'       => !empty($comp['business_type']) ? $comp['business_type'] : 'Supermarket',
-                        'gst_number'          => !empty($comp['gst_number']) ? $comp['gst_number'] : '33AABCU9603R1ZM',
-                        'country'             => 'India',
-                        'status'              => $comp['status'] ?? 'active',
-                        'days_remaining'      => 14,
-                        'trial_ends_at'       => !empty($comp['trial_ends_at']) ? date('d M Y', strtotime($comp['trial_ends_at'])) : 'N/A',
-                        'subscription_ends_at'=> !empty($comp['subscription_ends_at']) ? date('d M Y', strtotime($comp['subscription_ends_at'])) : 'N/A',
-                        'key_code'            => $keyCode,
-                        'plan_name'           => $planName,
-                        'price'               => ($comp['status'] ?? '') === 'active' ? '₹499 /mo' : 'Free Trial (₹0)',
-                        'mrr_amount'          => ($comp['status'] ?? '') === 'active' ? '₹499' : '₹0',
-                        'created_at'          => !empty($comp['created_at']) ? date('d M Y, H:i', strtotime($comp['created_at'])) : 'N/A',
-                        'users_count'         => 1,
-                        'products_count'      => 125,
-                        'warehouses_count'    => 1,
-                        'storage_used'        => '42.5 MB',
-                    ];
-                }, $rows);
-            }
+            }, $rows);
 
             jsonResponse(['success' => true, 'companies' => $companies]);
             break;
@@ -181,39 +145,21 @@ try {
         // 3. ACTIVATION KEYS LIST
         // ──────────────────────────────────────────────────────────
         case 'keys':
-            $rows = [];
-            if ($pdo) {
-                try {
-                    $stmt = $pdo->query("
-                        SELECT k.*, c.name as company_name 
-                        FROM activation_keys k 
-                        LEFT JOIN companies c ON k.company_id = c.id 
-                        ORDER BY (k.key_code = 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS') DESC, k.id DESC
-                    ");
-                    $rows = $stmt->fetchAll();
-                } catch (\Throwable $ex) {}
-            }
+            $keyResp = supabaseRest('/activation_keys?select=*&order=id.desc');
+            $rows = ($keyResp['success'] && is_array($keyResp['data'])) ? $keyResp['data'] : [];
 
-            if (empty($rows)) {
-                $keys = [
-                    ['id' => 1, 'key_code' => 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS', 'status' => 'active', 'company_name' => '🌐 Universal (All Clients Allowed)', 'plan_name' => 'INFY-POS FREE TRIAL (14 Days)', 'expires_at' => 'Unlimited / Permanent'],
-                    ['id' => 2, 'key_code' => 'INFYPOS-2026-75CF-D403', 'status' => 'active', 'company_name' => 'Atlanta Supermarket', 'plan_name' => 'INFY-POS PREMIUM', 'expires_at' => date('d M Y', strtotime('+30 days'))],
-                    ['id' => 3, 'key_code' => 'INFYPOS-2026-DEE2-5186', 'status' => 'active', 'company_name' => 'Jeyachandran Supermarket', 'plan_name' => 'INFY-POS PREMIUM', 'expires_at' => date('d M Y', strtotime('+30 days'))]
+            $keys = array_map(function ($key) {
+                $isGlobal = ($key['key_code'] === 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS');
+                return [
+                    'id'           => $key['id'],
+                    'key_code'     => $key['key_code'],
+                    'status'       => $isGlobal ? 'active' : ($key['status'] ?? 'active'),
+                    'company_name' => $isGlobal ? '🌐 Universal (All Clients Allowed)' : (!empty($key['company_name']) ? $key['company_name'] : 'Unassigned (Standby)'),
+                    'plan_name'    => $key['plan_name'] ?? 'INFY-POS PREMIUM (₹499/mo)',
+                    'expires_at'   => $isGlobal ? 'Unlimited / Permanent' : (!empty($key['expires_at']) ? date('d M Y', strtotime($key['expires_at'])) : 'Never'),
+                    'created_at'   => !empty($key['created_at']) ? date('d M Y', strtotime($key['created_at'])) : 'N/A',
                 ];
-            } else {
-                $keys = array_map(function ($key) {
-                    $isGlobal = ($key['key_code'] === 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS');
-                    return [
-                        'id'           => $key['id'],
-                        'key_code'     => $key['key_code'],
-                        'status'       => $isGlobal ? 'active' : ($key['status'] ?? 'active'),
-                        'company_name' => $isGlobal ? '🌐 Universal (All Clients Allowed)' : (!empty($key['company_name']) ? $key['company_name'] : 'Unassigned (Standby)'),
-                        'plan_name'    => $key['plan_name'] ?? 'INFY-POS PREMIUM',
-                        'expires_at'   => $isGlobal ? 'Unlimited / Permanent' : (!empty($key['expires_at']) ? date('d M Y', strtotime($key['expires_at'])) : 'Never'),
-                        'created_at'   => !empty($key['created_at']) ? date('d M Y', strtotime($key['created_at'])) : 'N/A',
-                    ];
-                }, $rows);
-            }
+            }, $rows);
 
             jsonResponse(['success' => true, 'keys' => $keys]);
             break;
@@ -223,8 +169,8 @@ try {
         // ──────────────────────────────────────────────────────────
         case 'generate-key':
             $input = array_merge($_POST, $jsonInput);
-            $days   = (int) ($input['days'] ?? 0);
-            $months = (int) ($input['months'] ?? 12);
+            $days   = (int) ($input['days'] ?? 30);
+            $months = (int) ($input['months'] ?? 1);
 
             if ($days > 0) {
                 $expiresAt = date('Y-m-d H:i:s', strtotime("+{$days} days"));
@@ -240,24 +186,26 @@ try {
 
             $keyCode = 'INFYPOS-2026-' . strtoupper(substr(md5(uniqid()), 0, 4)) . '-' . strtoupper(substr(md5(uniqid()), 4, 4));
 
-            if ($pdo) {
-                try {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO activation_keys (key_code, plan_name, price, status, expires_at, created_at, updated_at) 
-                        VALUES (?, ?, ?, 'unused', ?, NOW(), NOW())
-                    ");
-                    $stmt->execute([$keyCode, $planName, $price, $expiresAt]);
-                } catch (\Throwable $dbEx) {}
-            }
+            supabaseRest('/activation_keys', 'POST', [
+                'key_code'   => $keyCode,
+                'plan_name'  => $planName,
+                'price'      => $price,
+                'status'     => 'unused',
+                'expires_at' => date('c', strtotime($expiresAt)),
+                'created_at' => date('c'),
+                'updated_at' => date('c'),
+            ]);
 
             jsonResponse([
                 'success'        => true,
-                'message'        => "Activation Key '{$keyCode}' ({$durationLabel}) generated successfully!",
+                'message'        => "✅ Activation Key '{$keyCode}' ({$durationLabel}) generated successfully in Cloud Registry!",
                 'key_code'       => $keyCode,
                 'expires_at'     => date('d M Y', strtotime($expiresAt)),
                 'plan_name'      => $planName,
                 'duration_label' => $durationLabel,
             ]);
+            break;
+
             break;
 
         // ──────────────────────────────────────────────────────────
