@@ -201,9 +201,10 @@ try {
                 return [
                     'id'               => $key['id'],
                     'key_code'         => $key['key_code'],
-                    'status'           => $isGlobal ? 'active' : ($key['status'] ?? 'active'),
+                    'status'           => $isGlobal ? 'active' : (($key['status'] === 'trial') ? 'active' : ($key['status'] ?? 'active')),
                     'company_name'     => $companyName,
                     'assigned_company' => $companyName,
+
                     'plan_name'        => $key['plan_name'] ?? 'INFY-POS PREMIUM (₹499/mo)',
                     'expires_at'       => $isGlobal ? 'Unlimited / Permanent' : (!empty($key['expires_at']) ? date('d M Y', strtotime($key['expires_at'])) : 'Never'),
                     'created_at'       => !empty($key['created_at']) ? date('d M Y', strtotime($key['created_at'])) : 'N/A',
