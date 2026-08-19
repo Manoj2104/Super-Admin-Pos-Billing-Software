@@ -92,25 +92,15 @@ const SuperAdminCompanies = () => {
     const [actionMsg, setActionMsg] = useState('');
 
     // Load Companies & Stats from Real Backend DB
-    const loadData = async () => {
+    const loadData = async (isMounted = true) => {
+        setLoading(true);
         try {
-            let compRes, statsRes;
-            try {
-                compRes = await axios.get('api.php?action=companies');
-                statsRes = await axios.get('api.php?action=stats');
-            } catch (e0) {
-                try {
-                    [compRes, statsRes] = await Promise.all([
-                        apiConfig.get('saas-admin/companies'),
-                        apiConfig.get('saas-admin/stats')
-                    ]);
-                } catch (e1) {
-                    [compRes, statsRes] = await Promise.all([
-                        axios.get('/api/saas-admin/companies'),
-                        axios.get('/api/saas-admin/stats')
-                    ]);
-                }
-            }
+            const [compRes, statsRes] = await Promise.all([
+                axios.get('api.php?action=companies').catch(() => axios.get('/api/saas-admin/companies')).catch(() => null),
+                axios.get('api.php?action=stats').catch(() => axios.get('/api/saas-admin/stats')).catch(() => null)
+            ]);
+
+            if (!isMounted) return;
 
             if (compRes && compRes.data && compRes.data.success) {
                 setCompanies(compRes.data.companies || []);
@@ -121,14 +111,16 @@ const SuperAdminCompanies = () => {
                 try { localStorage.setItem('sa_stats_cache', JSON.stringify(statsRes.data)); } catch (e) {}
             }
         } catch (err) {
-            console.warn('SuperAdminCompanies: error loading data', err);
+            console.warn('SuperAdminCompanies load error', err);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadData();
+        let isMounted = true;
+        loadData(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     // Action Toast

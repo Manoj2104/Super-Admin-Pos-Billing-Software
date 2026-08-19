@@ -7,22 +7,24 @@ const SuperAdminReports = () => {
     const [reports, setReports] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const loadReports = async () => {
+    const loadReports = async (isMounted = true) => {
         setLoading(true);
         try {
             const res = await axios.get('/api/saas-admin/reports-data');
-            if (res.data && res.data.success) {
+            if (isMounted && res.data && res.data.success) {
                 setReports(res.data);
             }
         } catch (err) {
             console.warn('SuperAdminReports error', err);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadReports();
+        let isMounted = true;
+        loadReports(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     if (loading || !reports) {

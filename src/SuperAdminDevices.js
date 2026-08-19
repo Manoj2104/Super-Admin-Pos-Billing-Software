@@ -11,52 +11,14 @@ const SuperAdminDevices = () => {
     const [devices, setDevices] = useState(() => {
         try {
             const cached = localStorage.getItem('sa_devices_cache');
-            return (cached && JSON.parse(cached).length > 0) ? JSON.parse(cached) : [
-                {
-                    id: 1,
-                    device_name: 'Manoj (Primary POS Terminal)',
-                    machine_uuid: 'UUID-F20C2F89B22B2990',
-                    full_uuid: 'UUID-F20C2F89B22B2990-883A',
-                    os_version: 'Windows 11 Enterprise x64 (Build 22631)',
-                    ip_address: '127.0.0.1 (Local Host)',
-                    mac_address: 'C0:1A:2B:3C:4D:5E',
-                    company_name: 'Atlanta Supermarket',
-                    owner_name: 'Admin',
-                    ram_size: '16 GB DDR5',
-                    cpu_model: 'Intel Core i7-13700H',
-                    telemetry: '16 GB DDR5 Intel Core i7-13700H',
-                    last_seen: '08 Aug 2026, 11:12 AM',
-                    status: 'Online',
-                    is_blocked: false,
-                }
-            ];
-        } catch (e) {
-            return [
-                {
-                    id: 1,
-                    device_name: 'Manoj (Primary POS Terminal)',
-                    machine_uuid: 'UUID-F20C2F89B22B2990',
-                    full_uuid: 'UUID-F20C2F89B22B2990-883A',
-                    os_version: 'Windows 11 Enterprise x64 (Build 22631)',
-                    ip_address: '127.0.0.1 (Local Host)',
-                    mac_address: 'C0:1A:2B:3C:4D:5E',
-                    company_name: 'Atlanta Supermarket',
-                    owner_name: 'Admin',
-                    ram_size: '16 GB DDR5',
-                    cpu_model: 'Intel Core i7-13700H',
-                    telemetry: '16 GB DDR5 Intel Core i7-13700H',
-                    last_seen: '08 Aug 2026, 11:12 AM',
-                    status: 'Online',
-                    is_blocked: false,
-                }
-            ];
-        }
+            return cached ? JSON.parse(cached) : [];
+        } catch (e) { return []; }
     });
     const [summary, setSummary] = useState(() => {
         try {
             const cached = localStorage.getItem('sa_devices_summary');
-            return cached ? JSON.parse(cached) : { total_fleet: 1, online_count: 1, offline_count: 0, blocked_count: 0 };
-        } catch (e) { return { total_fleet: 1, online_count: 1, offline_count: 0, blocked_count: 0 }; }
+            return cached ? JSON.parse(cached) : { total_fleet: 0, online_count: 0, offline_count: 0, blocked_count: 0 };
+        } catch (e) { return { total_fleet: 0, online_count: 0, offline_count: 0, blocked_count: 0 }; }
     });
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -66,15 +28,15 @@ const SuperAdminDevices = () => {
     const [selectedDevice, setSelectedDevice] = useState(null);
     const [showDrawer, setShowDrawer] = useState(false);
 
-    const loadDevices = async () => {
+    const loadDevices = async (isMounted = true) => {
         try {
             let res;
             try {
                 res = await axios.get('api.php?action=devices');
-            } catch (e0) {
+            } catch (e1) {
                 res = await axios.get('/api/saas-admin/devices');
             }
-            if (res.data && res.data.success) {
+            if (isMounted && res && res.data && res.data.success) {
                 setDevices(res.data.devices || []);
                 try { localStorage.setItem('sa_devices_cache', JSON.stringify(res.data.devices || [])); } catch (e) {}
                 if (res.data.summary) {
@@ -83,14 +45,16 @@ const SuperAdminDevices = () => {
                 }
             }
         } catch (err) {
-            console.warn('SuperAdminDevices: load error', err);
+            console.warn('SuperAdminDevices load error', err);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadDevices();
+        let isMounted = true;
+        loadDevices(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     const showToast = (message) => {
@@ -100,16 +64,29 @@ const SuperAdminDevices = () => {
 
     const handleResetBinding = async (id, name) => {
         if (!window.confirm(`Reset device hardware lock binding for "${name}"?\n\nThe client will be able to bind a new machine on their next login.`)) return;
+
+        // ⚡ 0ms INSTANT OPTIMISTIC UI UPDATE
+        const previousDevices = [...devices];
+        setDevices(prev => {
+            const updated = prev.filter(d => d.id !== id);
+            try { localStorage.setItem('sa_devices_cache', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+        });
+
         try {
-            const res = await axios.post(`/api/saas-admin/reset-device-binding/${id}`);
-            if (res.data && res.data.success) {
-                showToast(res.data.message);
-                loadDevices();
+            let res;
+            try {
+                res = await axios.post(`api.php?action=unbind-device&id=${id}`);
+            } catch (e1) {
+                res = await axios.post(`/api/saas-admin/reset-device-binding/${id}`);
             }
+            showToast('Device Hardware Binding Reset Successfully! Client can now bind a new machine.');
         } catch (err) {
-            alert('Reset failed: ' + err.message);
+            setDevices(previousDevices);
+            alert('Reset failed: ' + (err.response?.data?.error || err.message));
         }
     };
+
 
     const copyUuid = (uuid) => {
         navigator.clipboard.writeText(uuid);

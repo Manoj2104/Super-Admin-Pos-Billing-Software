@@ -9,22 +9,24 @@ const SuperAdminBackups = () => {
     const [backingUp, setBackingUp] = useState(false);
     const [toastMsg, setToastMsg] = useState('');
 
-    const loadBackups = async () => {
+    const loadBackups = async (isMounted = true) => {
         setLoading(true);
         try {
             const res = await axios.get('/api/saas-admin/backups-list');
-            if (res.data && res.data.success) {
+            if (isMounted && res.data && res.data.success) {
                 setBackups(res.data.backups || []);
             }
         } catch (err) {
             console.warn('SuperAdminBackups error', err);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadBackups();
+        let isMounted = true;
+        loadBackups(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     const showToast = (msg) => {

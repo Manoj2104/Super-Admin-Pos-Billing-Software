@@ -13,22 +13,24 @@ const SuperAdminTrials = () => {
     const [extending, setExtending] = useState(false);
     const [toastMsg, setToastMsg] = useState('');
 
-    const loadTrials = async () => {
+    const loadTrials = async (isMounted = true) => {
         setLoading(true);
         try {
             const res = await axios.get('/api/saas-admin/trial-management');
-            if (res.data && res.data.success) {
+            if (isMounted && res.data && res.data.success) {
                 setTrials(res.data.trials || []);
             }
         } catch (err) {
             console.warn('SuperAdminTrials error', err);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadTrials();
+        let isMounted = true;
+        loadTrials(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     const showToast = (msg) => {

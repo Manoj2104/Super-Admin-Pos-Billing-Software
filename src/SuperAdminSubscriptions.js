@@ -62,9 +62,9 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
         setLoading(true);
         try {
             const [statsRes, compRes, logsRes] = await Promise.all([
-                axios.get('/api/saas-admin/stats').catch(() => null),
-                axios.get('/api/saas-admin/companies').catch(() => null),
-                axios.get('/api/saas-admin/override-logs').catch(() => null)
+                axios.get('api.php?action=stats').catch(() => axios.get('/api/saas-admin/stats')).catch(() => null),
+                axios.get('api.php?action=companies').catch(() => axios.get('/api/saas-admin/companies')).catch(() => null),
+                axios.get('api.php?action=override-logs').catch(() => axios.get('/api/saas-admin/override-logs')).catch(() => null)
             ]);
 
             if (!isMounted) return;
@@ -93,6 +93,7 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
         }
     };
 
+
     useEffect(() => {
         let isMounted = true;
         loadData(isMounted);
@@ -118,21 +119,53 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
         if (!modifyingComp) return;
         setSubmittingModify(true);
         try {
-            const res = await axios.post('/api/saas-admin/modify-subscription', {
-                company_id: modifyingComp.id,
-                plan_type: selectedPlanType
-            });
+            let res = null;
+            try {
+                res = await axios.post('/api/saas-admin/modify-subscription', {
+                    company_id: modifyingComp.id,
+                    plan_type: selectedPlanType
+                });
+            } catch (e0) {
+                res = await axios.post('super_admin/api.php?action=modify-subscription', {
+                    company_id: modifyingComp.id,
+                    plan_type: selectedPlanType
+                });
+            }
 
-            if (res.data && res.data.success) {
-                showToast(`Subscription modified successfully! New Key: ${res.data.new_key_code} updated in Client Billing Portal.`);
+            if (res && res.data && res.data.success) {
+                const newKey = res.data.new_key_code || 'INFYPOS-2026-KEY-UPDATED';
+                const newPlanName = selectedPlanType === 'trial_14' ? 'INFY-POS FREE TRIAL (14 Days)' : 'INFY-POS PREMIUM (Monthly)';
+                const newStatus = selectedPlanType === 'trial_14' ? 'trial' : 'active';
+
+                // Optimistically update local company list
+                setCompanies(prev => {
+                    const updated = prev.map(c => {
+                        if (c.id === modifyingComp.id) {
+                            return {
+                                ...c,
+                                status: newStatus,
+                                plan_name: newPlanName,
+                                key_code: newKey,
+                                subscription_ends_at: res.data.expires_at || c.subscription_ends_at,
+                                price: newStatus === 'active' ? '₹499 /mo' : 'Free Trial (₹0)',
+                                mrr_amount: newStatus === 'active' ? '₹499' : '₹0',
+                            };
+                        }
+                        return c;
+                    });
+                    try { localStorage.setItem('sa_companies_cache', JSON.stringify(updated)); } catch (e) {}
+                    return updated;
+                });
+
+                showToast(`Subscription modified successfully! New Key: ${newKey} updated in Client Billing Portal.`);
                 setShowModifyModal(false);
                 setModifyingComp(null);
                 loadData(true);
             } else {
-                alert('Modify failed: ' + (res.data.error || res.data.message));
+                alert('Modify failed: ' + (res?.data?.error || res?.data?.message || 'Server error'));
             }
         } catch (err) {
-            alert('Modify error: ' + (err.response?.data?.error || err.message));
+            alert('Modify error: ' + (err.response?.data?.error || err.response?.data?.message || err.message));
         } finally {
             setSubmittingModify(false);
         }

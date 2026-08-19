@@ -18,10 +18,11 @@ const SuperAdminSettings = () => {
     const [saveMsg, setSaveMsg] = useState('');
 
     useEffect(() => {
+        let isMounted = true;
         const loadSettings = async () => {
             try {
                 const res = await axios.get('/api/saas-admin/settings');
-                if (res.data && res.data.success && res.data.settings) {
+                if (isMounted && res.data && res.data.success && res.data.settings) {
                     setSettings(res.data.settings);
                 }
             } catch (err) {
@@ -29,6 +30,7 @@ const SuperAdminSettings = () => {
             }
         };
         loadSettings();
+        return () => { isMounted = false; };
     }, []);
 
     const handleSave = async (e) => {

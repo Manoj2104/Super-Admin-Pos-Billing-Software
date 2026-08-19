@@ -13,22 +13,24 @@ const SuperAdminSupport = () => {
     const [replying, setReplying] = useState(false);
     const [toastMsg, setToastMsg] = useState('');
 
-    const loadTickets = async () => {
+    const loadTickets = async (isMounted = true) => {
         setLoading(true);
         try {
             const res = await axios.get('/api/saas-admin/support-tickets');
-            if (res.data && res.data.success) {
+            if (isMounted && res.data && res.data.success) {
                 setTickets(res.data.tickets || []);
             }
         } catch (err) {
             console.warn('SuperAdminSupport error', err);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadTickets();
+        let isMounted = true;
+        loadTickets(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     const showToast = (msg) => {

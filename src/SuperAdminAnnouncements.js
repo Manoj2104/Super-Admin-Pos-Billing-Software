@@ -14,22 +14,24 @@ const SuperAdminAnnouncements = () => {
     const [submitting, setSubmitting] = useState(false);
     const [toastMsg, setToastMsg] = useState('');
 
-    const loadData = async () => {
+    const loadData = async (isMounted = true) => {
         setLoading(true);
         try {
             const res = await axios.get('/api/saas-admin/announcements-list');
-            if (res.data && res.data.success) {
+            if (isMounted && res.data && res.data.success) {
                 setAnnouncements(res.data.announcements || []);
             }
         } catch (err) {
             console.warn('SuperAdminAnnouncements error', err);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadData();
+        let isMounted = true;
+        loadData(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     const showToast = (msg) => {

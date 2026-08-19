@@ -68,20 +68,16 @@ const SuperAdminDashboard = ({ onNavigate }) => {
     });
 
     useEffect(() => {
+        let isMounted = true;
         const loadStats = async () => {
             try {
                 let res;
-                const apiBase = window.SUPERADMIN_API_BASE || 'api.php?action=';
                 try {
-                    res = await axios.get(apiBase + 'stats');
-                } catch (e0) {
-                    try {
-                        res = await apiConfig.get('saas-admin/stats');
-                    } catch (e1) {
-                        res = await axios.get('/api/saas-admin/stats');
-                    }
+                    res = await axios.get('api.php?action=stats');
+                } catch (e1) {
+                    res = await axios.get('/api/saas-admin/stats');
                 }
-                if (res && res.data && res.data.success) {
+                if (isMounted && res && res.data && res.data.success && res.data.totalCompanies) {
                     const mergedStats = { ...defaultStats, ...res.data };
                     setStats(mergedStats);
                     try { localStorage.setItem('sa_stats_cache', JSON.stringify(mergedStats)); } catch (e) {}
@@ -91,7 +87,9 @@ const SuperAdminDashboard = ({ onNavigate }) => {
             }
         };
         loadStats();
+        return () => { isMounted = false; };
     }, []);
+
 
     const safeStats = { ...defaultStats, ...stats };
 

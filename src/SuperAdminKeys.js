@@ -16,31 +16,29 @@ const SuperAdminKeys = () => {
     const [newKeyMsg, setNewKeyMsg] = useState(null);
     const [copiedKey, setCopiedKey] = useState('');
 
-    const loadKeys = async () => {
+    const loadKeys = async (isMounted = true) => {
         try {
             let res;
             try {
                 res = await axios.get('api.php?action=keys');
-            } catch (e0) {
-                try {
-                    res = await apiConfig.get('saas-admin/keys');
-                } catch (e1) {
-                    res = await axios.get('/api/saas-admin/keys');
-                }
+            } catch (e1) {
+                res = await axios.get('/api/saas-admin/keys');
             }
-            if (res && res.data && res.data.success) {
+            if (isMounted && res && res.data && res.data.success) {
                 setKeys(res.data.keys || []);
                 try { localStorage.setItem('sa_keys_cache', JSON.stringify(res.data.keys || [])); } catch (e) {}
             }
         } catch (err) {
             console.warn('SuperAdminKeys: load error', err);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadKeys();
+        let isMounted = true;
+        loadKeys(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     const [generating, setGenerating] = useState(false);
@@ -66,34 +64,28 @@ const SuperAdminKeys = () => {
             let res;
             try {
                 res = await axios.post('api.php?action=generate-key', payload);
-            } catch (e0) {
-                try {
-                    res = await apiConfig.post('saas-admin/generate-key', payload);
-                } catch (e1) {
-                    res = await axios.post('/api/saas-admin/generate-key', payload);
-                }
+            } catch (e1) {
+                res = await axios.post('/api/saas-admin/generate-key', payload);
             }
+
             if (res && res.data && res.data.success) {
                 setNewKeyMsg(res.data);
-
-                // Prepend new key into table in 0ms instantly!
+                
+                // ⚡ Prepend new key to table in 0ms instantly!
                 const newKeyObj = {
                     id: Date.now(),
                     key_code: res.data.key_code,
-                    status: 'active',
+                    status: 'unused',
                     company_name: 'Unassigned (Standby)',
-                    plan_name: res.data.plan_name || 'INFY-POS PREMIUM',
+                    plan_name: res.data.plan_name || 'INFY-POS PREMIUM (30 Days)',
                     expires_at: res.data.expires_at || 'Never',
                     created_at: 'Just Now',
                 };
-
                 setKeys(prev => {
                     const updated = [newKeyObj, ...prev];
                     try { localStorage.setItem('sa_keys_cache', JSON.stringify(updated)); } catch (e) {}
                     return updated;
                 });
-
-                loadKeys();
             }
         } catch (err) {
             alert('Failed to generate key: ' + (err.response?.data?.error || err.message));
@@ -104,58 +96,80 @@ const SuperAdminKeys = () => {
 
     const handleRevokeKey = async (id) => {
         if (!window.confirm('Are you sure you want to revoke this activation key? Connected company will be deactivated.')) return;
+        
+        // ⚡ 0ms INSTANT OPTIMISTIC UI UPDATE
+        const previousKeys = [...keys];
+        setKeys(prev => {
+            const updated = prev.map(k => k.id === id ? { ...k, status: 'revoked' } : k);
+            try { localStorage.setItem('sa_keys_cache', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+        });
+
         try {
             let res;
             try {
-                res = await apiConfig.post(`saas-admin/revoke-key/${id}`);
+                res = await axios.post(`api.php?action=revoke-key&id=${id}`);
             } catch (e1) {
                 res = await axios.post(`/api/saas-admin/revoke-key/${id}`);
             }
-            if (res && res.data && res.data.success) {
-                loadKeys();
-            }
         } catch (err) {
+            console.warn('Revoke error', err);
+            setKeys(previousKeys);
             alert('Revoke failed: ' + err.message);
         }
     };
 
     const handleExpireKey = async (id, keyCode) => {
         if (!window.confirm(`Are you sure you want to expire activation key '${keyCode}'? Connected company's plan will expire immediately.`)) return;
+        
+        // ⚡ 0ms INSTANT OPTIMISTIC UI UPDATE
+        const previousKeys = [...keys];
+        setKeys(prev => {
+            const updated = prev.map(k => (k.id === id || k.key_code === keyCode) ? { ...k, status: 'expired', expires_at: 'Expired Today' } : k);
+            try { localStorage.setItem('sa_keys_cache', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+        });
+
         try {
             let res;
             try {
-                res = await apiConfig.post(`saas-admin/expire-key/${id}`);
+                res = await axios.post(`api.php?action=expire-key&id=${id}`);
             } catch (e1) {
                 res = await axios.post(`/api/saas-admin/expire-key/${id}`);
             }
-            if (res && res.data && res.data.success) {
-                loadKeys();
-            } else {
-                alert('Expire failed: ' + (res.data.error || res.data.message));
-            }
         } catch (err) {
+            console.warn('Expire error', err);
+            setKeys(previousKeys);
             alert('Expire failed: ' + (err.response?.data?.error || err.message));
         }
     };
 
     const handleDeleteKey = async (id, keyCode) => {
         if (!window.confirm(`Are you sure you want to permanently delete activation key '${keyCode}'?`)) return;
+        
+        // ⚡ 0ms INSTANT OPTIMISTIC UI UPDATE
+        const previousKeys = [...keys];
+        setKeys(prev => {
+            const updated = prev.filter(k => k.id !== id && k.key_code !== keyCode);
+            try { localStorage.setItem('sa_keys_cache', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+        });
+
         try {
             let res;
             try {
-                res = await apiConfig.delete(`saas-admin/key/${id}`);
+                res = await axios.post(`api.php?action=delete-key&id=${id}`);
             } catch (e1) {
                 res = await axios.delete(`/api/saas-admin/key/${id}`);
             }
-            if (res && res.data && res.data.success) {
-                loadKeys();
-            } else {
-                alert('Delete failed: ' + (res.data.error || res.data.message));
-            }
         } catch (err) {
+            console.warn('Delete error', err);
+            setKeys(previousKeys);
             alert('Delete failed: ' + (err.response?.data?.error || err.message));
         }
     };
+
+
 
     const copyToClipboard = (code) => {
         navigator.clipboard.writeText(code);
@@ -312,10 +326,11 @@ const SuperAdminKeys = () => {
                                         </td>
                                         <td style={{ padding: '12px 16px' }}>
                                             {k.status === 'unused' && <span className="sa-pill sa-pill-trial">● Unused</span>}
-                                            {k.status === 'active' && <span className="sa-pill sa-pill-active">● Active</span>}
+                                            {(k.status === 'active' || k.status === 'trial') && <span className="sa-pill sa-pill-active">● Active</span>}
                                             {k.status === 'expired' && <span className="sa-pill sa-pill-expired">🔒 Expired</span>}
                                             {k.status === 'revoked' && <span className="sa-pill sa-pill-suspended">🚫 Revoked</span>}
                                         </td>
+
                                         <td style={{ padding: '12px 16px', fontWeight: '700', color: '#059669' }}>
                                             {k.plan_name || 'INFY-POS FREE TRIAL (14 Days)'}
                                         </td>
