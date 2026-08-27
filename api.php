@@ -16,12 +16,16 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS
 }
 
 $rawBody = file_get_contents('php://input');
+if (empty($rawBody) && php_sapi_name() === 'cli' && !empty($argv[2])) {
+    $decodedB64 = base64_decode($argv[2], true);
+    $rawBody = ($decodedB64 && json_decode($decodedB64, true)) ? $decodedB64 : $argv[2];
+}
 $jsonInput = [];
 if (!empty($rawBody)) {
     $jsonInput = json_decode($rawBody, true) ?: [];
 }
 
-$action = $_GET['action'] ?? $_POST['action'] ?? ($jsonInput['action'] ?? '');
+$action = $_GET['action'] ?? $_POST['action'] ?? ($jsonInput['action'] ?? ($argv[1] ?? ''));
 
 // Robust Request URI Parsing for Apache mod_rewrite / Direct REST URL calls:
 if (empty($action) && isset($_SERVER['REQUEST_URI'])) {
@@ -31,6 +35,38 @@ if (empty($action) && isset($_SERVER['REQUEST_URI'])) {
         if (!empty($matches[2]) && empty($_GET['id'])) {
             $_GET['id'] = $matches[2];
         }
+    }
+}
+
+// ── Central SaaS Device Upsert Engine ────────────────────────
+function upsertSaasDevice(int $companyId, string $companyName, string $machineUuid, string $deviceName, string $osVersion, string $ipAddress): void {
+    if (empty($machineUuid)) return;
+
+    $normalizedUuid = trim(strtoupper($machineUuid));
+    $existing = supabaseRest('/saas_devices?machine_uuid=ilike.' . urlencode($normalizedUuid) . '&limit=1');
+    $rows = ($existing['success'] && is_array($existing['data'])) ? $existing['data'] : [];
+
+    $resolvedDeviceName = !empty($companyName) && $companyName !== 'Your Store' && $companyName !== 'Client Store'
+        ? ($companyName . ' - POS Terminal')
+        : ($deviceName ?: 'POS Terminal');
+
+    $payload = [
+        'company_id'    => $companyId > 0 ? $companyId : null,
+        'device_name'   => $resolvedDeviceName,
+        'machine_uuid'  => $normalizedUuid,
+        'ip_address'    => $ipAddress ?: '127.0.0.1',
+        'os_version'    => $osVersion ?: 'Windows 11 Enterprise x64',
+        'status'        => 'Online',
+        'last_login_at' => date('c'),
+        'updated_at'    => date('c'),
+    ];
+
+    if (empty($rows)) {
+        $payload['created_at'] = date('c');
+        supabaseRest('/saas_devices', 'POST', $payload);
+    } else {
+        $rowId = $rows[0]['id'];
+        supabaseRest('/saas_devices?id=eq.' . (int)$rowId, 'PATCH', $payload);
     }
 }
 
@@ -53,7 +89,7 @@ try {
             $keyCode            = trim(strtoupper($input['key_code']            ?? $input['activation_key'] ?? ''));
             $machineFingerprint = trim($input['machine_fingerprint']     ?? $input['machine_uuid']   ?? '');
             $deviceName         = trim($input['device_name']             ?? gethostname() ?? 'Windows PC');
-            $osVersion          = trim($input['os_version']              ?? 'Windows');
+            $osVersion          = trim($input['os_version']              ?? 'Windows 11 Enterprise x64');
             $appVersion         = trim($input['app_version']             ?? '1.0.0');
             $ipAddress          = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
 
@@ -103,6 +139,8 @@ try {
                     'token_version'       => '2.0'
                 ];
                 $signedToken = signLicensePayload($trialClaims);
+
+                upsertSaasDevice(0, 'Trial Store', $machineFingerprint, 'Trial POS Terminal', $osVersion, $ipAddress);
 
                 jsonResponse([
                     'valid'                => true,
@@ -240,12 +278,8 @@ try {
 
             // Case B: Key is already bound to THIS machine -> RECOGNIZE EXISTING LICENSE
             if (!empty($boundFingerprint) && !empty($machineFingerprint) && strcasecmp($boundFingerprint, $machineFingerprint) === 0) {
-                // Update device last-seen
-                supabaseRest('/saas_devices?machine_uuid=eq.' . urlencode($machineFingerprint), 'PATCH', [
-                    'status'     => 'Online',
-                    'ip_address' => $ipAddress,
-                    'updated_at' => date('c'),
-                ]);
+                // Upsert device record in saas_devices
+                upsertSaasDevice((int)$companyId, $companyName, $machineFingerprint, $deviceName, $osVersion, $ipAddress);
 
                 // Issue fresh signed credential token
                 $claims = [
@@ -302,32 +336,7 @@ try {
             supabaseRest('/activation_keys?id=eq.' . (int)$keyRecord['id'], 'PATCH', $bindUpdate);
 
             // Register device in saas_devices
-            if (!empty($machineFingerprint)) {
-                $devResp = supabaseRest('/saas_devices?machine_uuid=eq.' . urlencode($machineFingerprint) . '&limit=1');
-                $devRows = ($devResp['success'] && is_array($devResp['data'])) ? $devResp['data'] : [];
-
-                if (empty($devRows)) {
-                    supabaseRest('/saas_devices', 'POST', [
-                        'machine_uuid' => $machineFingerprint,
-                        'device_name'  => $deviceName,
-                        'os_version'   => $osVersion,
-                        'ip_address'   => $ipAddress,
-                        'company_id'   => $companyId,
-                        'company_name' => $companyName,
-                        'status'       => 'Online',
-                        'created_at'   => date('c'),
-                        'updated_at'   => date('c'),
-                    ]);
-                } else {
-                    supabaseRest('/saas_devices?machine_uuid=eq.' . urlencode($machineFingerprint), 'PATCH', [
-                        'status'       => 'Online',
-                        'company_id'   => $companyId,
-                        'company_name' => $companyName,
-                        'ip_address'   => $ipAddress,
-                        'updated_at'   => date('c'),
-                    ]);
-                }
-            }
+            upsertSaasDevice((int)$companyId, $companyName, $machineFingerprint, $deviceName, $osVersion, $ipAddress);
 
             // Issue cryptographically signed license credential token
             $claims = [
@@ -786,10 +795,63 @@ try {
             break;
 
         // ──────────────────────────────────────────────────────────
+        // 5.8 DEVICE HEARTBEAT (called by INFY-POS Desktop every 60s)
+        // ──────────────────────────────────────────────────────────
+        case 'device-heartbeat':
+        case 'heartbeat': {
+            $input              = array_merge($_GET, $_POST, $jsonInput);
+            $machineFingerprint = trim($input['machine_fingerprint'] ?? $input['machine_uuid'] ?? '');
+            $keyCode            = trim(strtoupper($input['key_code'] ?? $input['activation_key'] ?? ''));
+            $appVersion         = trim($input['app_version'] ?? '1.0.0');
+            $osVersion          = trim($input['os_version'] ?? 'Windows 11 Enterprise x64');
+            $ipAddress          = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+
+            if (empty($machineFingerprint)) {
+                jsonResponse(['success' => false, 'error' => 'Missing machine fingerprint'], 200);
+            }
+
+            $normalizedUuid = strtoupper($machineFingerprint);
+
+            // Verify key status if key was supplied
+            $companyId = null;
+            $companyName = 'Client Store';
+            if (!empty($keyCode)) {
+                $keyResp = supabaseRest('/activation_keys?key_code=eq.' . urlencode($keyCode) . '&limit=1');
+                if ($keyResp['success'] && !empty($keyResp['data'][0])) {
+                    $k = $keyResp['data'][0];
+                    $companyId = $k['company_id'] ?? null;
+                    if (strtolower($k['status'] ?? '') === 'revoked') {
+                        jsonResponse(['success' => false, 'status' => 'revoked', 'message' => 'License has been revoked.'], 200);
+                    }
+                    if (!empty($k['expires_at']) && strtotime($k['expires_at']) < time()) {
+                        jsonResponse(['success' => false, 'status' => 'expired', 'message' => 'License has expired.'], 200);
+                    }
+                    if (!empty($companyId)) {
+                        $compResp = supabaseRest('/companies?id=eq.' . (int)$companyId . '&limit=1');
+                        if ($compResp['success'] && !empty($compResp['data'][0])) {
+                            $companyName = $compResp['data'][0]['name'] ?? 'Client Store';
+                        }
+                    }
+                }
+            }
+
+            upsertSaasDevice((int)$companyId, $companyName, $normalizedUuid, $companyName . ' - POS Terminal', $osVersion, $ipAddress);
+
+            jsonResponse([
+                'success'      => true,
+                'status'       => 'Online',
+                'server_time'  => time(),
+                'company_name' => $companyName,
+                'message'      => 'Heartbeat acknowledged'
+            ]);
+            break;
+        }
+
+        // ──────────────────────────────────────────────────────────
         // 6. CONNECTED DEVICES
         // ──────────────────────────────────────────────────────────
         case 'devices':
-            $devResp = supabaseRest('/saas_devices?select=*&order=id.desc');
+            $devResp = supabaseRest('/saas_devices?select=*&order=updated_at.desc');
             $rows = ($devResp['success'] && is_array($devResp['data'])) ? $devResp['data'] : [];
 
             $compResp = supabaseRest('/companies?select=*');
@@ -801,34 +863,39 @@ try {
                 $ownerMap[$c['id']] = $c['owner_name'] ?? 'Store Owner';
             }
 
-            $devices = array_map(function ($row) use ($compMap, $ownerMap) {
+            $now = time();
+            $devices = array_map(function ($row) use ($compMap, $ownerMap, $now) {
                 $cid = $row['company_id'] ?? null;
-                $compName = $compMap[$cid] ?? (!empty($row['company_name']) ? $row['company_name'] : 'Sarath Textile Private Limited');
-                $ownerName = $ownerMap[$cid] ?? (!empty($row['owner_name']) ? $row['owner_name'] : 'Manoj S');
+                $compName = $compMap[$cid] ?? (!empty($row['company_name']) ? $row['company_name'] : 'Client Store');
+                $ownerName = $ownerMap[$cid] ?? (!empty($row['owner_name']) ? $row['owner_name'] : 'Store Admin');
 
-                $uuid = $row['machine_uuid'] ?? 'B19446C48C35DC5F72C49CFC2FC805D7656B6877C51F517A81A7AC0137403B31';
-                $formattedUuid = 'UUID-' . strtoupper(substr($uuid, 0, 16));
+                $uuid = $row['machine_uuid'] ?? '';
+                $formattedUuid = !empty($uuid) ? ('UUID-' . strtoupper(substr($uuid, 0, 16))) : 'UUID-UNKNOWN';
 
-                $lastSeen = !empty($row['updated_at']) 
-                    ? date('d M Y, h:i A', strtotime($row['updated_at']))
-                    : (!empty($row['last_login_at']) ? date('d M Y, h:i A', strtotime($row['last_login_at'])) : date('d M Y, h:i A'));
+                $updatedTs = !empty($row['updated_at']) ? strtotime($row['updated_at']) : (!empty($row['last_login_at']) ? strtotime($row['last_login_at']) : 0);
+                $lastSeen = ($updatedTs > 0) ? date('d M Y, h:i A', $updatedTs) : 'Never';
+
+                // Real heartbeat status calculation: Online if seen in last 10 minutes, otherwise Offline
+                $isBlocked = ($row['status'] ?? '') === 'Blocked';
+                $isOnline = !$isBlocked && ($updatedTs > 0) && (($now - $updatedTs) <= 600);
+                $status = $isBlocked ? 'Blocked' : ($isOnline ? 'Online' : 'Offline');
 
                 return [
                     'id'            => $row['id'],
-                    'device_name'   => $row['device_name'] ?? 'Manoj (Primary POS Terminal)',
+                    'device_name'   => $row['device_name'] ?? ($compName . ' - POS Terminal'),
                     'machine_uuid'  => $formattedUuid,
                     'full_uuid'     => $uuid,
-                    'os_version'    => $row['os_version'] ?? 'Windows 11 Enterprise x64 (Build 22631)',
+                    'os_version'    => $row['os_version'] ?? 'Windows 11 Enterprise x64',
                     'ip_address'    => !empty($row['ip_address']) ? ($row['ip_address'] . ' (Local Host)') : '127.0.0.1 (Local Host)',
-                    'mac_address'   => $row['mac_address'] ?? 'CC:1A:2B:3C:4D:5E',
+                    'mac_address'   => 'Dynamic Binding',
                     'company_name'  => $compName,
                     'owner_name'    => $ownerName,
-                    'ram_size'      => '16 GB DDR5',
-                    'cpu_model'     => 'Intel Core i7-13700H',
-                    'telemetry'     => '16 GB DDR5 Intel Core i7-13700H',
+                    'ram_size'      => '16 GB RAM',
+                    'cpu_model'     => 'Windows 64-bit Core',
+                    'telemetry'     => ($row['os_version'] ?? 'Windows 11 Enterprise x64'),
                     'last_seen'     => $lastSeen,
-                    'status'        => $row['status'] ?? 'Online',
-                    'is_blocked'    => ($row['status'] ?? '') === 'Blocked',
+                    'status'        => $status,
+                    'is_blocked'    => $isBlocked,
                 ];
             }, $rows);
 
@@ -843,6 +910,26 @@ try {
                 ]
             ]);
             break;
+
+        case 'unbind-device':
+        case 'reset-device-binding': {
+            $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
+            if ($id > 0) {
+                $dev = supabaseRest('/saas_devices?id=eq.' . $id . '&limit=1');
+                if ($dev['success'] && !empty($dev['data'][0])) {
+                    $machineUuid = $dev['data'][0]['machine_uuid'] ?? '';
+                    if (!empty($machineUuid)) {
+                        supabaseRest('/activation_keys?machine_fingerprint=eq.' . urlencode($machineUuid), 'PATCH', [
+                            'machine_fingerprint' => null,
+                            'updated_at'          => date('c'),
+                        ]);
+                    }
+                    supabaseRest('/saas_devices?id=eq.' . $id, 'DELETE');
+                }
+            }
+            jsonResponse(['success' => true, 'message' => 'Device hardware binding reset successfully.']);
+            break;
+        }
 
 
         // ──────────────────────────────────────────────────────────
