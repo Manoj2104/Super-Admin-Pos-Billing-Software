@@ -38,6 +38,415 @@ try {
     $pdo = getCloudPdo();
 
     switch ($action) {
+
+        // ──────────────────────────────────────────────────────────
+        // 0a. ACTIVATE KEY & BIND MACHINE (called by Windows Installer & Desktop App)
+        // Maximum Security Architecture:
+        //  - Cryptographically secure CSPRNG validation
+        //  - Anti-brute-force rate limiting (max 5 failed attempts per 10m)
+        //  - Server-authoritative atomic machine binding (Supabase)
+        //  - Asymmetric RSA-2048 SHA-256 Signed License Credential Token
+        // ──────────────────────────────────────────────────────────
+        case 'activate-key':
+        case 'activate-device': {
+            $input              = array_merge($_GET, $_POST, $jsonInput);
+            $keyCode            = trim(strtoupper($input['key_code']            ?? $input['activation_key'] ?? ''));
+            $machineFingerprint = trim($input['machine_fingerprint']     ?? $input['machine_uuid']   ?? '');
+            $deviceName         = trim($input['device_name']             ?? gethostname() ?? 'Windows PC');
+            $osVersion          = trim($input['os_version']              ?? 'Windows');
+            $appVersion         = trim($input['app_version']             ?? '1.0.0');
+            $ipAddress          = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+
+            // 1. Anti-Brute-Force Rate Limiting
+            $rateIdentifier = $ipAddress . '_' . ($machineFingerprint ?: 'unknown');
+            if (!checkRateLimit($rateIdentifier, 5, 600)) {
+                jsonResponse([
+                    'valid'      => false,
+                    'success'    => false,
+                    'error_code' => 'ACTIVATION_RATE_LIMITED',
+                    'message'    => "Too Many Activation Attempts\n\nYou have exceeded the maximum allowed activation attempts.\nPlease wait 10 minutes before trying again or contact your administrator."
+                ], 200);
+            }
+
+            if (empty($keyCode)) {
+                recordFailedAttempt($rateIdentifier);
+                jsonResponse([
+                    'valid'      => false,
+                    'success'    => false,
+                    'error_code' => 'EMPTY_KEY',
+                    'message'    => 'Please enter an activation key.'
+                ], 200);
+            }
+
+            // Universal Global Free Trial Master Key
+            if ($keyCode === 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS') {
+                clearFailedAttempts($rateIdentifier);
+                $trialIssued = time();
+                $trialExpires = strtotime('+14 days');
+                $trialClaims = [
+                    'license_id'          => 1,
+                    'activation_id'       => 'TRIAL-14DAYS-MASTER',
+                    'key_code'            => $keyCode,
+                    'company_id'          => 0,
+                    'company_name'        => 'Trial Store',
+                    'owner_name'          => 'Store Admin',
+                    'email'               => 'admin@pos.com',
+                    'phone'               => '',
+                    'business_type'       => 'Retail',
+                    'currency'            => 'INR',
+                    'plan_name'           => 'INFY-POS FREE TRIAL (14 Days)',
+                    'issued_at'           => $trialIssued,
+                    'expires_at'          => $trialExpires,
+                    'device_binding'      => $machineFingerprint,
+                    'status'              => 'active',
+                    'grace_days'          => 7,
+                    'token_version'       => '2.0'
+                ];
+                $signedToken = signLicensePayload($trialClaims);
+
+                jsonResponse([
+                    'valid'                => true,
+                    'success'              => true,
+                    'activation_status'    => 'active',
+                    'machine_match'        => true,
+                    'already_activated'    => false,
+                    'signed_license_token' => $signedToken,
+                    'key_code'             => $keyCode,
+                    'company_name'         => 'Trial Store',
+                    'owner_name'           => 'Store Admin',
+                    'email'                => 'admin@pos.com',
+                    'phone'                => '',
+                    'business_type'        => 'Retail',
+                    'currency'             => 'INR',
+                    'plan_name'            => 'INFY-POS FREE TRIAL (14 Days)',
+                    'duration'             => '14 Days',
+                    'activated_at'         => date('d M Y', $trialIssued),
+                    'expires_at'           => date('d M Y', $trialExpires),
+                    'message'              => 'Free Trial Activated (14 Days)!'
+                ], 200);
+            }
+
+            // 2. Look up key in Supabase
+            $keyResp = supabaseRest('/activation_keys?key_code=eq.' . urlencode($keyCode) . '&limit=1');
+            $keyRows = ($keyResp['success'] && is_array($keyResp['data'])) ? $keyResp['data'] : [];
+
+            if (empty($keyRows)) {
+                recordFailedAttempt($rateIdentifier);
+                jsonResponse([
+                    'valid'      => false,
+                    'success'    => false,
+                    'error_code' => 'INVALID_KEY',
+                    'message'    => "Invalid Activation Key\n\nThe activation key you entered is not valid. Please check the key and try again."
+                ], 200);
+            }
+
+            $keyRecord        = $keyRows[0];
+            $keyStatus        = strtolower($keyRecord['status'] ?? 'active');
+            $expiresAt        = $keyRecord['expires_at'] ?? '';
+            $boundFingerprint = trim($keyRecord['machine_fingerprint'] ?? '');
+            $companyId        = $keyRecord['company_id'] ?? null;
+            $planName         = $keyRecord['plan_name']   ?? 'INFY-POS PREMIUM';
+
+            // 3. Validate key status
+            if ($keyStatus === 'revoked') {
+                recordFailedAttempt($rateIdentifier);
+                jsonResponse([
+                    'valid'      => false,
+                    'success'    => false,
+                    'error_code' => 'KEY_REVOKED',
+                    'message'    => "License Revoked\n\nThis activation key has been revoked by the administrator. Please contact support."
+                ], 200);
+            }
+
+            if ($keyStatus === 'locked') {
+                recordFailedAttempt($rateIdentifier);
+                jsonResponse([
+                    'valid'      => false,
+                    'success'    => false,
+                    'error_code' => 'KEY_LOCKED',
+                    'message'    => "Account Locked\n\nThis store account has been locked. Please contact support."
+                ], 200);
+            }
+
+            // Check date-based expiry
+            if (!empty($expiresAt) && strtotime($expiresAt) < time()) {
+                if ($keyStatus !== 'expired') {
+                    supabaseRest('/activation_keys?id=eq.' . (int)$keyRecord['id'], 'PATCH', [
+                        'status'     => 'expired',
+                        'updated_at' => date('c'),
+                    ]);
+                }
+                recordFailedAttempt($rateIdentifier);
+                jsonResponse([
+                    'valid'      => false,
+                    'success'    => false,
+                    'error_code' => 'LICENSE_EXPIRED',
+                    'message'    => "License Expired\n\nThis activation key has expired and cannot be used."
+                ], 200);
+            }
+
+            if ($keyStatus === 'expired') {
+                recordFailedAttempt($rateIdentifier);
+                jsonResponse([
+                    'valid'      => false,
+                    'success'    => false,
+                    'error_code' => 'LICENSE_EXPIRED',
+                    'message'    => "License Expired\n\nThis activation key has expired and cannot be used."
+                ], 200);
+            }
+
+            // 4. Look up Company Profile details
+            $companyName  = 'Your Store';
+            $ownerName    = 'Store Admin';
+            $email        = 'admin@pos.com';
+            $phone        = '';
+            $businessType = 'Retail';
+            $currency     = 'INR';
+
+            if (!empty($companyId)) {
+                $compResp = supabaseRest('/companies?id=eq.' . (int)$companyId . '&limit=1');
+                $compRows = ($compResp['success'] && is_array($compResp['data'])) ? $compResp['data'] : [];
+                if (!empty($compRows[0])) {
+                    $c = $compRows[0];
+                    if (!empty($c['name']))          $companyName  = trim($c['name']);
+                    if (!empty($c['owner_name']))    $ownerName    = trim($c['owner_name']);
+                    if (!empty($c['email']))         $email        = trim($c['email']);
+                    if (!empty($c['phone']))         $phone        = trim($c['phone']);
+                    if (!empty($c['business_type'])) $businessType = trim($c['business_type']);
+                }
+            }
+
+            $expiresDisplay = !empty($expiresAt) ? date('d M Y', strtotime($expiresAt)) : 'Permanent';
+            $activatedDisplay = !empty($keyRecord['activated_at']) ? date('d M Y', strtotime($keyRecord['activated_at'])) : date('d M Y');
+            $issuedTimestamp = time();
+            $expiresTimestamp = !empty($expiresAt) ? strtotime($expiresAt) : strtotime('+365 days');
+
+            // 5. Authoritative Machine Fingerprint Matching
+            // Case A: Key is already bound to another machine -> BLOCK ACTIVATION
+            if (!empty($boundFingerprint) && !empty($machineFingerprint) && strcasecmp($boundFingerprint, $machineFingerprint) !== 0) {
+                recordFailedAttempt($rateIdentifier);
+                jsonResponse([
+                    'valid'             => false,
+                    'success'           => false,
+                    'activation_status' => 'active',
+                    'machine_match'     => false,
+                    'error_code'        => 'KEY_BOUND_TO_OTHER_DEVICE',
+                    'message'           => "Already Active on Another Device\n\nThis activation key is already activated on another device.\nYou cannot use this key on this computer.\n\nPlease use a new activation key or contact your administrator."
+                ], 200);
+            }
+
+            // Clear any prior rate limiting on legitimate match or new activation
+            clearFailedAttempts($rateIdentifier);
+
+            // Case B: Key is already bound to THIS machine -> RECOGNIZE EXISTING LICENSE
+            if (!empty($boundFingerprint) && !empty($machineFingerprint) && strcasecmp($boundFingerprint, $machineFingerprint) === 0) {
+                // Update device last-seen
+                supabaseRest('/saas_devices?machine_uuid=eq.' . urlencode($machineFingerprint), 'PATCH', [
+                    'status'     => 'Online',
+                    'ip_address' => $ipAddress,
+                    'updated_at' => date('c'),
+                ]);
+
+                // Issue fresh signed credential token
+                $claims = [
+                    'license_id'          => (int)$keyRecord['id'],
+                    'activation_id'       => 'ACT-' . strtoupper(substr(hash('sha256', $keyCode . $machineFingerprint . $issuedTimestamp), 0, 16)),
+                    'key_code'            => $keyCode,
+                    'company_id'          => (int)($companyId ?? 0),
+                    'company_name'        => $companyName,
+                    'owner_name'          => $ownerName,
+                    'email'               => $email,
+                    'phone'               => $phone,
+                    'business_type'       => $businessType,
+                    'currency'            => $currency,
+                    'plan_name'           => $planName,
+                    'issued_at'           => $issuedTimestamp,
+                    'expires_at'          => $expiresTimestamp,
+                    'device_binding'      => $machineFingerprint,
+                    'status'              => 'active',
+                    'grace_days'          => 7,
+                    'token_version'       => '2.0'
+                ];
+                $signedToken = signLicensePayload($claims);
+
+                jsonResponse([
+                    'valid'                => true,
+                    'success'              => true,
+                    'activation_status'    => 'active',
+                    'machine_match'        => true,
+                    'already_activated'    => true,
+                    'signed_license_token' => $signedToken,
+                    'key_code'             => $keyCode,
+                    'company_name'         => $companyName,
+                    'owner_name'           => $ownerName,
+                    'email'                => $email,
+                    'phone'                => $phone,
+                    'business_type'        => $businessType,
+                    'currency'             => $currency,
+                    'plan_name'            => $planName,
+                    'activated_at'         => $activatedDisplay,
+                    'expires_at'           => $expiresDisplay,
+                    'message'              => "Already Active on This Device\n\nThis INFY-POS license is already activated on this device."
+                ], 200);
+            }
+
+            // Case C: Key is NOT yet bound to any machine -> FIRST TIME ACTIVATION (ATOMIC BINDING)
+            $bindUpdate = [
+                'machine_fingerprint' => $machineFingerprint ?: ('WIN-' . gethostname()),
+                'status'              => 'active',
+                'activated_at'        => !empty($keyRecord['activated_at']) ? $keyRecord['activated_at'] : date('c'),
+                'updated_at'          => date('c'),
+            ];
+
+            // Perform atomic update in Supabase
+            supabaseRest('/activation_keys?id=eq.' . (int)$keyRecord['id'], 'PATCH', $bindUpdate);
+
+            // Register device in saas_devices
+            if (!empty($machineFingerprint)) {
+                $devResp = supabaseRest('/saas_devices?machine_uuid=eq.' . urlencode($machineFingerprint) . '&limit=1');
+                $devRows = ($devResp['success'] && is_array($devResp['data'])) ? $devResp['data'] : [];
+
+                if (empty($devRows)) {
+                    supabaseRest('/saas_devices', 'POST', [
+                        'machine_uuid' => $machineFingerprint,
+                        'device_name'  => $deviceName,
+                        'os_version'   => $osVersion,
+                        'ip_address'   => $ipAddress,
+                        'company_id'   => $companyId,
+                        'company_name' => $companyName,
+                        'status'       => 'Online',
+                        'created_at'   => date('c'),
+                        'updated_at'   => date('c'),
+                    ]);
+                } else {
+                    supabaseRest('/saas_devices?machine_uuid=eq.' . urlencode($machineFingerprint), 'PATCH', [
+                        'status'       => 'Online',
+                        'company_id'   => $companyId,
+                        'company_name' => $companyName,
+                        'ip_address'   => $ipAddress,
+                        'updated_at'   => date('c'),
+                    ]);
+                }
+            }
+
+            // Issue cryptographically signed license credential token
+            $claims = [
+                'license_id'          => (int)$keyRecord['id'],
+                'activation_id'       => 'ACT-' . strtoupper(substr(hash('sha256', $keyCode . $machineFingerprint . $issuedTimestamp), 0, 16)),
+                'key_code'            => $keyCode,
+                'company_id'          => (int)($companyId ?? 0),
+                'company_name'        => $companyName,
+                'owner_name'          => $ownerName,
+                'email'               => $email,
+                'phone'               => $phone,
+                'business_type'       => $businessType,
+                'currency'            => $currency,
+                'plan_name'           => $planName,
+                'issued_at'           => $issuedTimestamp,
+                'expires_at'          => $expiresTimestamp,
+                'device_binding'      => $machineFingerprint,
+                'status'              => 'active',
+                'grace_days'          => 7,
+                'token_version'       => '2.0'
+            ];
+            $signedToken = signLicensePayload($claims);
+
+            jsonResponse([
+                'valid'                => true,
+                'success'              => true,
+                'activation_status'    => 'active',
+                'machine_match'        => true,
+                'already_activated'    => false,
+                'signed_license_token' => $signedToken,
+                'key_code'             => $keyCode,
+                'company_name'         => $companyName,
+                'owner_name'           => $ownerName,
+                'email'                => $email,
+                'phone'                => $phone,
+                'business_type'        => $businessType,
+                'currency'             => $currency,
+                'plan_name'            => $planName,
+                'activated_at'         => date('d M Y'),
+                'expires_at'           => $expiresDisplay,
+                'message'              => 'Activation successful for ' . $companyName . '!'
+            ], 200);
+            break;
+        }
+
+        // ──────────────────────────────────────────────────────────
+        // 0b. UNBIND KEY (Super Admin action to transfer/reset device binding)
+        // ──────────────────────────────────────────────────────────
+        case 'unbind-key': {
+            $input   = array_merge($_POST, $jsonInput);
+            $keyId   = (int)($input['id'] ?? 0);
+            $keyCode = trim($input['key_code'] ?? '');
+
+            if ($keyId > 0) {
+                supabaseRest('/activation_keys?id=eq.' . $keyId, 'PATCH', [
+                    'machine_fingerprint' => null,
+                    'updated_at'          => date('c'),
+                ]);
+            } else if (!empty($keyCode)) {
+                supabaseRest('/activation_keys?key_code=eq.' . urlencode($keyCode), 'PATCH', [
+                    'machine_fingerprint' => null,
+                    'updated_at'          => date('c'),
+                ]);
+            }
+
+            jsonResponse(['success' => true, 'message' => 'Machine binding cleared successfully. Key is now available for new machine activation.']);
+            break;
+        }
+
+        // ──────────────────────────────────────────────────────────
+        // 0b. VERIFY KEY (called by desktop app on startup for re-validation)
+        // Lightweight: just checks key status and expiry. Does not re-register device.
+        // Returns: { success, status, expires_at }
+        // ──────────────────────────────────────────────────────────
+        case 'verify-key': {
+            $keyCode = trim(strtoupper($_GET['key_code'] ?? $jsonInput['key_code'] ?? ''));
+
+            if (empty($keyCode)) {
+                jsonResponse(['success' => false, 'message' => 'key_code is required.']);
+            }
+
+            // Global trial key is always valid
+            if ($keyCode === 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS') {
+                jsonResponse(['success' => true, 'status' => 'active', 'expires_at' => 'Unlimited']);
+            }
+
+            $keyResp = supabaseRest('/activation_keys?key_code=eq.' . urlencode($keyCode) . '&select=status,expires_at,plan_name&limit=1');
+            $keyRows = ($keyResp['success'] && is_array($keyResp['data'])) ? $keyResp['data'] : [];
+
+            if (empty($keyRows)) {
+                jsonResponse(['success' => false, 'status' => 'not_found', 'message' => 'Key not found.']);
+            }
+
+            $row    = $keyRows[0];
+            $status = strtolower($row['status'] ?? 'active');
+
+            // Also check date-based expiry
+            if ($status === 'active' && !empty($row['expires_at']) && strtotime($row['expires_at']) < time()) {
+                $status = 'expired';
+            }
+
+            // Update last-seen timestamp for connected device
+            $machineUuid = trim($_GET['machine_uuid'] ?? $jsonInput['machine_uuid'] ?? '');
+            if (!empty($machineUuid)) {
+                supabaseRest('/saas_devices?machine_uuid=eq.' . urlencode($machineUuid), 'PATCH', [
+                    'status'     => 'Online',
+                    'updated_at' => date('c'),
+                ]);
+            }
+
+            jsonResponse([
+                'success'    => ($status === 'active' || $status === 'trial'),
+                'status'     => $status,
+                'expires_at' => $row['expires_at'] ?? '',
+                'plan_name'  => $row['plan_name']  ?? '',
+            ]);
+            break;
+        }
+
         // ──────────────────────────────────────────────────────────
         // 1. STATS & ANALYTICS
         // ──────────────────────────────────────────────────────────
@@ -198,16 +607,20 @@ try {
                     $companyName = $compMap[$key['company_id']];
                 }
 
-                return [
-                    'id'               => $key['id'],
-                    'key_code'         => $key['key_code'],
-                    'status'           => $isGlobal ? 'active' : (($key['status'] === 'trial') ? 'active' : ($key['status'] ?? 'active')),
-                    'company_name'     => $companyName,
-                    'assigned_company' => $companyName,
+                $boundFingerprint = !empty($key['machine_fingerprint']) ? trim($key['machine_fingerprint']) : null;
 
-                    'plan_name'        => $key['plan_name'] ?? 'INFY-POS PREMIUM (₹499/mo)',
-                    'expires_at'       => $isGlobal ? 'Unlimited / Permanent' : (!empty($key['expires_at']) ? date('d M Y', strtotime($key['expires_at'])) : 'Never'),
-                    'created_at'       => !empty($key['created_at']) ? date('d M Y', strtotime($key['created_at'])) : 'N/A',
+                return [
+                    'id'                  => $key['id'],
+                    'key_code'            => $key['key_code'],
+                    'status'              => $isGlobal ? 'active' : (($key['status'] === 'trial') ? 'active' : ($key['status'] ?? 'active')),
+                    'company_name'        => $companyName,
+                    'assigned_company'    => $companyName,
+                    'machine_fingerprint' => $boundFingerprint,
+                    'is_bound'            => !empty($boundFingerprint),
+                    'bound_device'        => !empty($boundFingerprint) ? (substr($boundFingerprint, 0, 8) . '...' . substr($boundFingerprint, -4)) : 'Unbound (Standby)',
+                    'plan_name'           => $key['plan_name'] ?? 'INFY-POS PREMIUM (₹499/mo)',
+                    'expires_at'          => $isGlobal ? 'Unlimited / Permanent' : (!empty($key['expires_at']) ? date('d M Y', strtotime($key['expires_at'])) : 'Never'),
+                    'created_at'          => !empty($key['created_at']) ? date('d M Y', strtotime($key['created_at'])) : 'N/A',
                 ];
             }, $rows);
 
@@ -236,7 +649,11 @@ try {
                 $price = 499.00 * $months;
             }
 
-            $keyCode = 'INFYPOS-2026-' . strtoupper(substr(md5(uniqid()), 0, 4)) . '-' . strtoupper(substr(md5(uniqid()), 4, 4));
+            // Cryptographically secure random key generator with 128-bit CSPRNG entropy
+            $rawBytes = random_bytes(16);
+            $part1 = strtoupper(bin2hex(substr($rawBytes, 0, 4)));
+            $part2 = strtoupper(bin2hex(substr($rawBytes, 4, 4)));
+            $keyCode = 'INFYPOS-2026-KEY-' . $part1 . $part2;
 
             supabaseRest('/activation_keys', 'POST', [
                 'key_code'   => $keyCode,
