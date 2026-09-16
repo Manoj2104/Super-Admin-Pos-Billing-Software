@@ -114,56 +114,6 @@ try {
                 ], 200);
             }
 
-            // Universal Global Free Trial Master Key
-            if ($keyCode === 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS') {
-                clearFailedAttempts($rateIdentifier);
-                $trialIssued = time();
-                $trialExpires = strtotime('+14 days');
-                $trialClaims = [
-                    'license_id'          => 1,
-                    'activation_id'       => 'TRIAL-14DAYS-MASTER',
-                    'key_code'            => $keyCode,
-                    'company_id'          => 0,
-                    'company_name'        => 'Trial Store',
-                    'owner_name'          => 'Store Admin',
-                    'email'               => 'admin@pos.com',
-                    'phone'               => '',
-                    'business_type'       => 'Retail',
-                    'currency'            => 'INR',
-                    'plan_name'           => 'INFY-POS FREE TRIAL (14 Days)',
-                    'issued_at'           => $trialIssued,
-                    'expires_at'          => $trialExpires,
-                    'device_binding'      => $machineFingerprint,
-                    'status'              => 'active',
-                    'grace_days'          => 7,
-                    'token_version'       => '2.0'
-                ];
-                $signedToken = signLicensePayload($trialClaims);
-
-                upsertSaasDevice(0, 'Trial Store', $machineFingerprint, 'Trial POS Terminal', $osVersion, $ipAddress);
-
-                jsonResponse([
-                    'valid'                => true,
-                    'success'              => true,
-                    'activation_status'    => 'active',
-                    'machine_match'        => true,
-                    'already_activated'    => false,
-                    'signed_license_token' => $signedToken,
-                    'key_code'             => $keyCode,
-                    'company_name'         => 'Trial Store',
-                    'owner_name'           => 'Store Admin',
-                    'email'                => 'admin@pos.com',
-                    'phone'                => '',
-                    'business_type'        => 'Retail',
-                    'currency'             => 'INR',
-                    'plan_name'            => 'INFY-POS FREE TRIAL (14 Days)',
-                    'duration'             => '14 Days',
-                    'activated_at'         => date('d M Y', $trialIssued),
-                    'expires_at'           => date('d M Y', $trialExpires),
-                    'message'              => 'Free Trial Activated (14 Days)!'
-                ], 200);
-            }
-
             // 2. Look up key in Supabase
             $keyResp = supabaseRest('/activation_keys?key_code=eq.' . urlencode($keyCode) . '&limit=1');
             $keyRows = ($keyResp['success'] && is_array($keyResp['data'])) ? $keyResp['data'] : [];
@@ -418,11 +368,6 @@ try {
                 jsonResponse(['success' => false, 'message' => 'key_code is required.']);
             }
 
-            // Global trial key is always valid
-            if ($keyCode === 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS') {
-                jsonResponse(['success' => true, 'status' => 'active', 'expires_at' => 'Unlimited']);
-            }
-
             $keyResp = supabaseRest('/activation_keys?key_code=eq.' . urlencode($keyCode) . '&select=status,expires_at,plan_name&limit=1');
             $keyRows = ($keyResp['success'] && is_array($keyResp['data'])) ? $keyResp['data'] : [];
 
@@ -608,11 +553,8 @@ try {
             }
 
             $keys = array_map(function ($key) use ($compMap) {
-                $isGlobal = ($key['key_code'] === 'INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS');
                 $companyName = 'Unassigned (Standby)';
-                if ($isGlobal) {
-                    $companyName = '🌐 Universal (All Clients Allowed)';
-                } else if (!empty($key['company_id']) && isset($compMap[$key['company_id']])) {
+                if (!empty($key['company_id']) && isset($compMap[$key['company_id']])) {
                     $companyName = $compMap[$key['company_id']];
                 }
 
@@ -621,14 +563,14 @@ try {
                 return [
                     'id'                  => $key['id'],
                     'key_code'            => $key['key_code'],
-                    'status'              => $isGlobal ? 'active' : (($key['status'] === 'trial') ? 'active' : ($key['status'] ?? 'active')),
+                    'status'              => strtolower($key['status'] ?? 'active'),
                     'company_name'        => $companyName,
                     'assigned_company'    => $companyName,
                     'machine_fingerprint' => $boundFingerprint,
                     'is_bound'            => !empty($boundFingerprint),
                     'bound_device'        => !empty($boundFingerprint) ? (substr($boundFingerprint, 0, 8) . '...' . substr($boundFingerprint, -4)) : 'Unbound (Standby)',
                     'plan_name'           => $key['plan_name'] ?? 'INFY-POS PREMIUM (₹499/mo)',
-                    'expires_at'          => $isGlobal ? 'Unlimited / Permanent' : (!empty($key['expires_at']) ? date('d M Y', strtotime($key['expires_at'])) : 'Never'),
+                    'expires_at'          => !empty($key['expires_at']) ? date('d M Y', strtotime($key['expires_at'])) : 'Never',
                     'created_at'          => !empty($key['created_at']) ? date('d M Y', strtotime($key['created_at'])) : 'N/A',
                 ];
             }, $rows);
@@ -723,8 +665,8 @@ try {
                 'updated_at'           => date('c'),
             ]);
 
-            // Delete old keys for this company (except global master free trial)
-            supabaseRest('/activation_keys?company_id=eq.' . $companyId . '&key_code=neq.INFYPOS-2026-GLOBAL-FREE-TRIAL-14DAYS', 'DELETE');
+            // Delete old keys for this company
+            supabaseRest('/activation_keys?company_id=eq.' . $companyId, 'DELETE');
 
             supabaseRest('/activation_keys', 'POST', [
                 'key_code'     => $newKeyCode,
@@ -1140,6 +1082,94 @@ try {
             jsonResponse(['success' => true, 'invoices' => $invoices]);
             break;
 
+        // ──────────────────────────────────────────────────────────
+        // register-company — Called by setup_store.php after local DB install
+        // Creates/updates the company in Supabase so it appears in Super Admin
+        // ──────────────────────────────────────────────────────────
+        case 'register-company': {
+            $input        = array_merge($_POST, $jsonInput);
+            $storeName    = trim($input['store_name']    ?? '');
+            $ownerName    = trim($input['owner_name']    ?? '');
+            $email        = trim($input['email']         ?? '');
+            $phone        = trim($input['phone']         ?? '');
+            $bizType      = trim($input['business_type'] ?? 'General Retail Store');
+            $currency     = trim($input['currency']      ?? 'INR');
+            $activationKey = strtoupper(trim($input['activation_key'] ?? ''));
+            $machineId    = trim($input['machine_fingerprint'] ?? '');
+            $planName     = trim($input['plan_name']     ?? 'INFY-POS FREE TRIAL (14 Days)');
+
+            if (empty($storeName) || empty($email)) {
+                jsonResponse(['success' => false, 'message' => 'store_name and email are required.'], 200);
+            }
+
+            // 1. Check if company already exists by email
+            $existResp = supabaseRest('/companies?email=eq.' . urlencode($email) . '&limit=1');
+            $existRows = ($existResp['success'] && is_array($existResp['data'])) ? $existResp['data'] : [];
+            $companyId = null;
+
+            if (!empty($existRows[0])) {
+                // Update existing company record
+                $companyId = $existRows[0]['id'];
+                supabaseRest('/companies?id=eq.' . (int)$companyId, 'PATCH', [
+                    'name'          => $storeName,
+                    'owner_name'    => $ownerName,
+                    'phone'         => $phone,
+                    'business_type' => $bizType,
+                    'status'        => 'active',
+                    'updated_at'    => date('c'),
+                ]);
+                $action_taken = 'updated';
+            } else {
+                // Create new company record
+                $trialEndsAt = date('c', strtotime('+14 days'));
+                $newComp = supabaseRest('/companies', 'POST', [
+                    'name'               => $storeName,
+                    'owner_name'         => $ownerName,
+                    'email'              => $email,
+                    'phone'              => $phone,
+                    'business_type'      => $bizType,
+                    'currency'           => $currency,
+                    'status'             => 'active',
+                    'trial_ends_at'      => $trialEndsAt,
+                    'subscription_ends_at' => $trialEndsAt,
+                    'created_at'         => date('c'),
+                    'updated_at'         => date('c'),
+                ]);
+                $companyId = $newComp['data'][0]['id'] ?? null;
+                $action_taken = 'created';
+            }
+
+            // 2. Link activation key to this company (bind machine fingerprint)
+            if (!empty($activationKey) && !empty($companyId)) {
+                $keyResp = supabaseRest('/activation_keys?key_code=eq.' . urlencode($activationKey) . '&limit=1');
+                if (!empty($keyResp['data'][0])) {
+                    $keyId = $keyResp['data'][0]['id'];
+                    $patchData = [
+                        'company_id' => (int)$companyId,
+                        'status'     => 'active',
+                        'updated_at' => date('c'),
+                    ];
+                    if (!empty($machineId)) {
+                        $patchData['machine_fingerprint'] = $machineId;
+                    }
+                    supabaseRest('/activation_keys?id=eq.' . $keyId, 'PATCH', $patchData);
+                }
+            }
+
+            // 3. Register device if machine fingerprint provided
+            if (!empty($machineId) && !empty($companyId)) {
+                upsertSaasDevice((int)$companyId, $storeName, $machineId, $storeName . ' - POS Terminal', 'Windows 10/11', $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1');
+            }
+
+            jsonResponse([
+                'success'    => true,
+                'message'    => "Company '{$storeName}' {$action_taken} in Super Admin portal.",
+                'company_id' => $companyId,
+                'action'     => $action_taken,
+            ]);
+            break;
+        }
+
         default:
 
             // Always return a clean JSON response for unknown actions instead of throwing 400
@@ -1149,6 +1179,7 @@ try {
             ]);
             break;
     }
+
 } catch (\Throwable $e) {
     // Ultimate Catch-All: Always return HTTP 200 with valid JSON response so client never receives HTTP 500
     jsonResponse([
