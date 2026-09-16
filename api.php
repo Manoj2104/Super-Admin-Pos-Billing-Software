@@ -1120,21 +1120,21 @@ try {
                 ]);
                 $action_taken = 'updated';
             } else {
-                // Create new company record
+                // Create new company record — only columns that exist in Supabase schema
                 $trialEndsAt = date('c', strtotime('+14 days'));
                 $newComp = supabaseRest('/companies', 'POST', [
-                    'name'               => $storeName,
-                    'owner_name'         => $ownerName,
-                    'email'              => $email,
-                    'phone'              => $phone,
-                    'business_type'      => $bizType,
-                    'currency'           => $currency,
-                    'status'             => 'active',
-                    'trial_ends_at'      => $trialEndsAt,
+                    'name'                 => $storeName,
+                    'owner_name'           => $ownerName,
+                    'email'                => $email,
+                    'phone'                => $phone,
+                    'business_type'        => $bizType,
+                    'status'               => 'active',
+                    'trial_ends_at'        => $trialEndsAt,
                     'subscription_ends_at' => $trialEndsAt,
-                    'created_at'         => date('c'),
-                    'updated_at'         => date('c'),
+                    'created_at'           => date('c'),
+                    'updated_at'           => date('c'),
                 ]);
+
                 $companyId = $newComp['data'][0]['id'] ?? null;
                 $action_taken = 'created';
             }
