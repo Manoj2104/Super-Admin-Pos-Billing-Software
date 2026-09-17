@@ -1,11 +1,19 @@
+<?php
+$bundleVer = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ . '/assets/js/app.js') : time();
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>INFY-POS Enterprise Super Admin Control Center</title>
     <link rel="icon" type="image/png" href="favicon.ico">
-    <link rel="stylesheet" href="assets/css/style.css">
     <style>
         body, html { margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0F172A; color: #F8FAFC; min-height: 100vh; }
         #root { min-height: 100vh; }
@@ -21,6 +29,6 @@
 <body>
     <div id="root"></div>
 
-    <script src="assets/js/app.js"></script>
+    <script src="assets/js/app.js?v=<?= $bundleVer ?>"></script>
 </body>
 </html>
