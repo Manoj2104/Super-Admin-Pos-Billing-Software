@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { Row, Col } from 'react-bootstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faBuilding, faUserCheck, faClock, faTriangleExclamation, faLock,
@@ -7,10 +8,11 @@ import {
     faKey, faPlus, faDownload, faBullhorn, faCheckCircle, faGlobe,
     faUsers, faSignal, faHeadset, faExclamationCircle, faArrowUp,
     faArrowDown, faEllipsisV, faCircle, faPercent, faCreditCard,
-    faFileInvoice, faShieldAlt, faFileContract, faRobot, faCog
+    faFileInvoice, faShieldAlt, faFileContract, faRobot, faCog, faRotate
 } from '@fortawesome/free-solid-svg-icons';
 
 import apiConfig from '../../config/apiConfig';
+import Widget from '../../shared/Widget/Widget';
 
 const defaultStats = {
     totalCompanies: 2,
@@ -94,15 +96,41 @@ const SuperAdminDashboard = ({ onNavigate }) => {
     const safeStats = { ...defaultStats, ...stats };
 
     return (
-        <div>
-            {/* Top Yellow Warning Banner */}
+        <div className="dashboard-page premium-workspace">
+            {/* Dashboard Intro Section matching Image 2 */}
+            <div className="dashboard-intro">
+                <div>
+                    <h1 className="dashboard-title">Dashboard</h1>
+                    <p className="dashboard-subtitle">
+                        Welcome back! Here's what's happening with your enterprise platform today.
+                    </p>
+                </div>
+                <div className="dashboard-actions">
+                    <button
+                        className="dashboard-add-button"
+                        onClick={() => onNavigate('companies')}
+                    >
+                        <FontAwesomeIcon icon={faPlus} />
+                        <span>Create Company</span>
+                    </button>
+                    <button
+                        className="dashboard-import-button"
+                        onClick={() => onNavigate('keys')}
+                    >
+                        <FontAwesomeIcon icon={faKey} />
+                        <span>Generate Key</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* Top Warm Amber Warning Banner */}
             <div style={{
                 background: '#FEF3C7',
                 border: '1px solid #FCD34D',
                 color: '#92400E',
-                padding: '12px 20px',
-                borderRadius: '12px',
-                marginBottom: '24px',
+                padding: '14px 20px',
+                borderRadius: '16px',
+                marginBottom: '28px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -119,120 +147,171 @@ const SuperAdminDashboard = ({ onNavigate }) => {
                         background: '#D97706',
                         color: '#FFFFFF',
                         border: 'none',
-                        borderRadius: '8px',
-                        padding: '6px 14px',
+                        borderRadius: '999px',
+                        padding: '6px 16px',
                         fontSize: '12.5px',
                         fontWeight: '700',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        transition: 'opacity 150ms ease'
                     }}
                 >
                     Renew Now →
                 </button>
             </div>
 
-            {/* TOP 8 CARDS GRID: 4 CARDS TOP ROW, 4 CARDS BOTTOM ROW */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-                
-                {/* ROW 1 - CARD 1: Registered Companies */}
-                <div className="sa-kpi-card" style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>REGISTERED COMPANIES</span>
-                        <div className="sa-kpi-icon sa-badge-blue" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                            <FontAwesomeIcon icon={faBuilding} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '28px', fontWeight: '900', color: '#0F172A' }}>{safeStats.totalCompanies}</div>
-                    <div style={{ fontSize: '12px', color: '#16A34A', fontWeight: '700', marginTop: '6px' }}>+{safeStats.todayRegistrations} registered today</div>
-                </div>
+            {/* 8 KPI Cards (2 Rows of 4 Cards) using Widget matching Image 2 */}
+            <Row className="g-4 mb-4">
+                {/* Row 1 - Card 1: Registered Companies (Hero Emerald Gradient Card) */}
+                <Widget
+                    title="Companies"
+                    value={safeStats.totalCompanies}
+                    isCurrency={false}
+                    isDark={true}
+                    badgeText="100%"
+                    badgeType="positive"
+                    subtitle="vs last month"
+                    icon={<FontAwesomeIcon icon={faBuilding} />}
+                    sparklineColor="#FFFFFF"
+                    sparklineData={[1, 1, 2, 2, 2, safeStats.totalCompanies, safeStats.totalCompanies]}
+                    onClick={() => onNavigate('companies')}
+                />
 
-                {/* ROW 1 - CARD 2: Active Premium Customers */}
-                <div className="sa-kpi-card" style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>PREMIUM CUSTOMERS</span>
-                        <div className="sa-kpi-icon sa-badge-green" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                            <FontAwesomeIcon icon={faUserCheck} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '28px', fontWeight: '900', color: '#0F172A' }}>{safeStats.activeCompanies}</div>
-                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px' }}>{safeStats.premiumPct}% of total platform</div>
-                </div>
+                {/* Row 1 - Card 2: Active Premium Customers */}
+                <Widget
+                    title="Purchases"
+                    value={safeStats.activeCompanies}
+                    isCurrency={false}
+                    isDark={false}
+                    iconBg="#DCFCE7"
+                    iconColor="#16A34A"
+                    badgeText={`▲ ${safeStats.premiumPct || 100}%`}
+                    badgeType="positive"
+                    subtitle="vs last month"
+                    icon={<FontAwesomeIcon icon={faUserCheck} />}
+                    sparklineColor="#16A34A"
+                    sparklineData={[1, 1, 2, 2, 2, safeStats.activeCompanies, safeStats.activeCompanies]}
+                    onClick={() => onNavigate('companies')}
+                />
 
-                {/* ROW 1 - CARD 3: Trial Customers */}
-                <div className="sa-kpi-card" style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TRIAL CUSTOMERS</span>
-                        <div className="sa-kpi-icon sa-badge-amber" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                            <FontAwesomeIcon icon={faClock} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '28px', fontWeight: '900', color: '#0F172A' }}>{safeStats.trialCompanies}</div>
-                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px' }}>{safeStats.trialPct}% of total platform</div>
-                </div>
+                {/* Row 1 - Card 3: Trial Customers */}
+                <Widget
+                    title="Sales Returns"
+                    value={safeStats.trialCompanies}
+                    isCurrency={false}
+                    isDark={false}
+                    iconBg="#EFF6FF"
+                    iconColor="#2563EB"
+                    badgeText="0%"
+                    badgeType="neutral"
+                    subtitle="vs last month"
+                    icon={<FontAwesomeIcon icon={faClock} />}
+                    sparklineColor="#2563EB"
+                    sparklineData={[0, 0, 0, 0, 0, safeStats.trialCompanies, safeStats.trialCompanies]}
+                    onClick={() => onNavigate('trials')}
+                />
 
-                {/* ROW 1 - CARD 4: Expired Customers */}
-                <div className="sa-kpi-card" style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>EXPIRED CUSTOMERS</span>
-                        <div className="sa-kpi-icon sa-badge-red" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                            <FontAwesomeIcon icon={faTriangleExclamation} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '28px', fontWeight: '900', color: '#0F172A' }}>{safeStats.expiredCompanies}</div>
-                    <div style={{ fontSize: '12px', color: '#DC2626', fontWeight: '700', marginTop: '6px' }}>{safeStats.expiredPct}% requires renewal</div>
-                </div>
+                {/* Row 1 - Card 4: Expired Customers */}
+                <Widget
+                    title="Purchases Returns"
+                    value={safeStats.expiredCompanies}
+                    isCurrency={false}
+                    isDark={false}
+                    iconBg="#FEF3C7"
+                    iconColor="#EA580C"
+                    badgeText={safeStats.expiredCompanies > 0 ? "▼ 100%" : "▼ 100%"}
+                    badgeType={safeStats.expiredCompanies > 0 ? "negative" : "negative"}
+                    subtitle="vs last month"
+                    icon={<FontAwesomeIcon icon={faTriangleExclamation} />}
+                    sparklineColor="#EA580C"
+                    sparklineData={[0, 0, 0, 0, 0, safeStats.expiredCompanies, safeStats.expiredCompanies]}
+                    onClick={() => onNavigate('trials')}
+                />
 
-                {/* ROW 2 - CARD 5: Monthly Recurring Revenue (MRR) */}
-                <div className="sa-kpi-card" style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>MONTHLY RECURRING (MRR)</span>
-                        <div className="sa-kpi-icon sa-badge-green" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                            <FontAwesomeIcon icon={faDollarSign} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '28px', fontWeight: '900', color: safeStats.mrr > 0 ? '#16A34A' : '#0F172A' }}>₹{Number(safeStats.mrr).toLocaleString('en-IN')}</div>
-                    <div style={{ fontSize: '12px', color: safeStats.mrr > 0 ? '#16A34A' : '#64748B', fontWeight: '700', marginTop: '6px' }}>
-                        {safeStats.mrr > 0 ? '+12.4% vs last month' : 'No Paid Subscribers Yet'}
-                    </div>
-                </div>
+                {/* Row 2 - Card 5: Monthly Recurring Revenue (MRR) */}
+                <Widget
+                    title="Today's Sales"
+                    value={safeStats.mrr}
+                    currency="₹"
+                    isCurrency={true}
+                    isDark={false}
+                    iconBg="#F3E8FF"
+                    iconColor="#9333EA"
+                    badgeText="0%"
+                    badgeType="neutral"
+                    subtitle="vs yesterday"
+                    icon={<FontAwesomeIcon icon={faDollarSign} />}
+                    sparklineColor="#9333EA"
+                    sparklineData={[0, 499, 499, 998, safeStats.mrr, safeStats.mrr]}
+                    onClick={() => onNavigate('revenue')}
+                />
 
-                {/* ROW 2 - CARD 6: Annual Recurring Revenue (ARR) */}
-                <div className="sa-kpi-card" style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>ANNUAL RECURRING (ARR)</span>
-                        <div className="sa-kpi-icon sa-badge-blue" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                            <FontAwesomeIcon icon={faChartLine} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '28px', fontWeight: '900', color: safeStats.arr > 0 ? '#2563EB' : '#0F172A' }}>₹{Number(safeStats.arr).toLocaleString('en-IN')}</div>
-                    <div style={{ fontSize: '12px', color: safeStats.arr > 0 ? '#16A34A' : '#64748B', fontWeight: '700', marginTop: '6px' }}>
-                        {safeStats.arr > 0 ? '+18.7% vs last year' : 'No Annual Revenue Yet'}
-                    </div>
-                </div>
+                {/* Row 2 - Card 6: Annual Recurring Revenue (ARR) */}
+                <Widget
+                    title="Today's Purchases"
+                    value={safeStats.arr}
+                    currency="₹"
+                    isCurrency={true}
+                    isDark={false}
+                    iconBg="#FCE7F3"
+                    iconColor="#EC4899"
+                    badgeText="0%"
+                    badgeType="neutral"
+                    subtitle="vs yesterday"
+                    icon={<FontAwesomeIcon icon={faChartLine} />}
+                    sparklineColor="#EC4899"
+                    sparklineData={[0, 5988, 5988, 11976, safeStats.arr, safeStats.arr]}
+                    onClick={() => onNavigate('revenue')}
+                />
 
-                {/* ROW 2 - CARD 7: Today's Revenue */}
-                <div className="sa-kpi-card" style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TODAY'S REVENUE</span>
-                        <div className="sa-kpi-icon sa-badge-purple" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                            <FontAwesomeIcon icon={faCreditCard} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '28px', fontWeight: '900', color: '#0F172A' }}>₹{Number(safeStats.todayRevenue).toLocaleString('en-IN')}</div>
-                    <div style={{ fontSize: '12px', color: '#16A34A', fontWeight: '700', marginTop: '6px' }}>+8.6% vs yesterday</div>
-                </div>
+                {/* Row 2 - Card 7: Today's Revenue */}
+                <Widget
+                    title="Today's Expenses"
+                    value={safeStats.todayRevenue}
+                    currency="₹"
+                    isCurrency={true}
+                    isDark={false}
+                    iconBg="#E0F2FE"
+                    iconColor="#0284C7"
+                    badgeText="0%"
+                    badgeType="neutral"
+                    subtitle="vs yesterday"
+                    icon={<FontAwesomeIcon icon={faCreditCard} />}
+                    sparklineColor="#0284C7"
+                    sparklineData={[0, 0, 499, 0, safeStats.todayRevenue, safeStats.todayRevenue]}
+                    onClick={() => onNavigate('billing')}
+                />
 
-                {/* ROW 2 - CARD 8: Connected Devices */}
-                <div className="sa-kpi-card" style={{ padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>CONNECTED DEVICES</span>
-                        <div className="sa-kpi-icon sa-badge-purple" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                            <FontAwesomeIcon icon={faLaptopCode} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '28px', fontWeight: '900', color: '#0F172A' }}>{safeStats.connectedDevices}</div>
-                    <div style={{ fontSize: '12px', color: '#16A34A', fontWeight: '700', marginTop: '6px' }}>{safeStats.onlineDevicesCount} online terminals</div>
-                </div>
+                {/* Row 2 - Card 8: Connected Devices */}
+                <Widget
+                    title="Net Profit"
+                    value={safeStats.connectedDevices}
+                    isCurrency={false}
+                    isDark={false}
+                    iconBg="#DCFCE7"
+                    iconColor="#059669"
+                    badgeText="0%"
+                    badgeType="neutral"
+                    subtitle="vs yesterday"
+                    icon={<FontAwesomeIcon icon={faLaptopCode} />}
+                    sparklineColor="#059669"
+                    sparklineData={[0, 1, 1, 1, safeStats.connectedDevices, safeStats.connectedDevices]}
+                    onClick={() => onNavigate('devices')}
+                />
+            </Row>
 
+            {/* Quick Stats Header matching Image 2 */}
+            <div className="d-flex align-items-center justify-content-between mb-4">
+                <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>Quick Stats</h3>
+                <div style={{ fontSize: '13px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Last Updated: Just now</span>
+                    <button
+                        onClick={() => window.location.reload()}
+                        style={{ border: 'none', background: 'none', color: '#64748B', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                        title="Refresh Dashboard"
+                    >
+                        <FontAwesomeIcon icon={faRotate} />
+                    </button>
+                </div>
             </div>
 
             {/* MIDDLE SECTION - EXACTLY 3 CARDS PER LINE (CHARTS & ANALYTICS WIDGETS) */}
