@@ -27,13 +27,22 @@ if (!empty($rawBody)) {
 
 $action = $_GET['action'] ?? $_POST['action'] ?? ($jsonInput['action'] ?? ($argv[1] ?? ''));
 
+// If action was mistakenly set to 'saas-admin', resolve it from $_GET['id'] or request URI
+if ($action === 'saas-admin' && !empty($_GET['id'])) {
+    $action = $_GET['id'];
+}
+
 // Robust Request URI Parsing for Apache mod_rewrite / Direct REST URL calls:
-if (empty($action) && isset($_SERVER['REQUEST_URI'])) {
+if ((empty($action) || $action === 'saas-admin') && isset($_SERVER['REQUEST_URI'])) {
     $uriPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
     if (preg_match('#(?:/api/|api/)(?:saas-admin/)?([^/]+)(?:/([^/]+))?#i', $uriPath, $matches)) {
-        $action = $matches[1];
-        if (!empty($matches[2]) && empty($_GET['id'])) {
-            $_GET['id'] = $matches[2];
+        if ($matches[1] !== 'saas-admin') {
+            $action = $matches[1];
+            if (!empty($matches[2]) && empty($_GET['id'])) {
+                $_GET['id'] = $matches[2];
+            }
+        } elseif (!empty($matches[2])) {
+            $action = $matches[2];
         }
     }
 }
