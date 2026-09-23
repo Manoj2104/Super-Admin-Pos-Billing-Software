@@ -105,10 +105,10 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
     const loadData = async (isMounted = true) => {
         setLoading(true);
         try {
-            const res = await Promise.race([
-                axios.get('/api/saas-admin/companies'),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
-            ]).catch(() => null);
+            let res = await axios.get('api.php?action=companies').catch(() => null);
+            if (!res || !res.data || !res.data.companies) {
+                res = await axios.get('/api/saas-admin/companies').catch(() => null);
+            }
 
             if (!isMounted) return;
 
@@ -168,21 +168,35 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
         try {
             let res = null;
             try {
-                res = await axios.post('/api/saas-admin/modify-subscription', {
+                res = await axios.post('api.php?action=modify-subscription', {
                     company_id: modifyingComp.id,
                     plan_type: selectedPlanType
                 });
             } catch (e0) {
-                res = await axios.post('/api/saas-admin/company/action', {
-                    company_id: modifyingComp.id,
-                    action: 'modify_plan',
-                    plan_type: selectedPlanType
-                }).catch(() => null);
+                try {
+                    res = await axios.post('/api/saas-admin/modify-subscription', {
+                        company_id: modifyingComp.id,
+                        plan_type: selectedPlanType
+                    });
+                } catch (e1) {
+                    res = await axios.post('/api/saas-admin/company/action', {
+                        company_id: modifyingComp.id,
+                        action: 'modify_plan',
+                        plan_type: selectedPlanType
+                    }).catch(() => null);
+                }
             }
 
             const newKey = res?.data?.new_key_code || `INFYPOS-2026-KEY-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-            const newPlanName = selectedPlanType === 'trial_14' ? 'INFY-POS FREE TRIAL (14 Days)' : 'INFY-POS MONTHLY PLAN (30 Days)';
-            const newStatus = selectedPlanType === 'trial_14' ? 'trial' : 'active';
+            const planNameMap = {
+                trial_14:     'INFY-POS FREE TRIAL (14 Days)',
+                monthly_30:   'INFY-POS PREMIUM (30 Days)',
+                quarterly_90: 'INFY-POS 3-MONTH PLAN (90 Days)',
+                yearly_365:   'INFY-POS ANNUAL PLAN (365 Days)',
+            };
+            const newPlanName = res?.data?.plan_name || planNameMap[selectedPlanType] || 'INFY-POS PREMIUM (30 Days)';
+            const newStatus = res?.data?.status || (selectedPlanType === 'trial_14' ? 'trial' : 'active');
+            const newExpiresAt = res?.data?.expires_at || null;
 
             // Optimistically update local company list
             setCompanies(prev => {
@@ -193,7 +207,7 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
                             status: newStatus,
                             plan_name: newPlanName,
                             key_code: newKey,
-                            subscription_ends_at: res?.data?.expires_at || c.subscription_ends_at,
+                            subscription_ends_at: newExpiresAt || c.subscription_ends_at,
                             price: newStatus === 'active' ? '₹499 /mo' : 'Free Trial (₹0)',
                             mrr_amount: newStatus === 'active' ? '₹499' : '₹0',
                         };
@@ -217,6 +231,9 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
             showToast(`Subscription modified! New Key: ${newKey}`);
             setShowModifyModal(false);
             setModifyingComp(null);
+
+            // Re-sync authoritative list from server
+            loadData();
         } catch (err) {
             alert('Modify error: ' + (err.response?.data?.message || err.message));
         } finally {

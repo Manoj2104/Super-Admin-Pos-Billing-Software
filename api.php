@@ -665,19 +665,30 @@ try {
                 'updated_at'           => date('c'),
             ]);
 
-            // Delete old keys for this company
-            supabaseRest('/activation_keys?company_id=eq.' . $companyId, 'DELETE');
+            // Fetch existing bound machine fingerprint if any
+            $existingKeysResp = supabaseRest('/activation_keys?company_id=eq.' . $companyId . '&order=id.desc&limit=1');
+            $existingFingerprint = null;
+            if (!empty($existingKeysResp['success']) && !empty($existingKeysResp['data'][0]['machine_fingerprint'])) {
+                $existingFingerprint = $existingKeysResp['data'][0]['machine_fingerprint'];
+            }
+
+            // Mark previous active keys as expired instead of hard DELETE
+            supabaseRest('/activation_keys?company_id=eq.' . $companyId . '&status=eq.active', 'PATCH', [
+                'status'     => 'expired',
+                'updated_at' => date('c'),
+            ]);
 
             supabaseRest('/activation_keys', 'POST', [
-                'key_code'     => $newKeyCode,
-                'company_id'   => $companyId,
-                'plan_name'    => $planName,
-                'price'        => 0.00,
-                'status'       => 'active',
-                'activated_at' => date('c'),
-                'expires_at'   => date('c', strtotime($newEnds)),
-                'created_at'   => date('c'),
-                'updated_at'   => date('c'),
+                'key_code'            => $newKeyCode,
+                'company_id'          => $companyId,
+                'plan_name'           => $planName,
+                'price'               => 0.00,
+                'status'              => 'active',
+                'machine_fingerprint' => $existingFingerprint,
+                'activated_at'        => date('c'),
+                'expires_at'          => date('c', strtotime($newEnds)),
+                'created_at'          => date('c'),
+                'updated_at'          => date('c'),
             ]);
 
             jsonResponse([
