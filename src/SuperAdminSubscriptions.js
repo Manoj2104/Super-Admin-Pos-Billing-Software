@@ -17,6 +17,41 @@ import "../productCategory/ProductCategoriesPremium.css";
 import LiveCounter from "../../shared/components/LiveCounter";
 import LiveSparkline from "../../shared/components/LiveSparkline";
 
+const getCompanyPlanInfo = (comp) => {
+    const planNameStr = (comp.plan_name || '').toLowerCase();
+    const priceStr = String(comp.price || '');
+    const isEnterprise = planNameStr.includes('enterprise') || 
+                         priceStr.includes('2,999') || 
+                         priceStr.includes('2999') || 
+                         comp.price_amount === 2999;
+
+    let price = 'Free Trial (₹0)';
+    let plan = comp.plan_name || 'Billrys POS Free Trial';
+
+    if (comp.status === 'active') {
+        if (isEnterprise) {
+            price = '₹2,999 /mo';
+            plan = 'Billrys POS Enterprise';
+        } else {
+            price = comp.price && !comp.price.includes('Free') ? comp.price : '₹499 /mo';
+            plan = comp.plan_name || 'Billrys POS Premium';
+        }
+    }
+    return { price, plan, isEnterprise };
+};
+
+const calculateMrrFromCompanies = (compList) => {
+    let totalMrr = 0;
+    if (!Array.isArray(compList)) return 0;
+    compList.forEach(c => {
+        if (c.status === 'active') {
+            const { isEnterprise } = getCompanyPlanInfo(c);
+            totalMrr += isEnterprise ? 2999 : 499;
+        }
+    });
+    return totalMrr;
+};
+
 const SuperAdminSubscriptions = ({ onNavigate }) => {
     // 0ms Instant Synchronous Load from Cache
     const [companies, setCompanies] = useState(() => {
@@ -39,7 +74,7 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
                 const active = cachedComps.filter(c => c.status === 'active').length;
                 const expired = cachedComps.filter(c => c.status === 'expired').length;
                 const trial = cachedComps.filter(c => c.status === 'trial').length;
-                const mrr = active * 499;
+                const mrr = calculateMrrFromCompanies(cachedComps);
                 return {
                     totalCompanies: cachedComps.length,
                     activeCompanies: active,
@@ -120,7 +155,7 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
                 const active = compList.filter(c => c.status === 'active').length;
                 const expired = compList.filter(c => c.status === 'expired').length;
                 const trial = compList.filter(c => c.status === 'trial').length;
-                const mrr = active * 499;
+                const mrr = calculateMrrFromCompanies(compList);
 
                 setStats(prev => ({
                     ...prev,
@@ -427,7 +462,7 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
                         </div>
                     </div>
                     <div className="var-kpi-value">
-                        <LiveCounter value={stats.mrr || (stats.activeCompanies * 499)} isCurrency={true} />
+                        <LiveCounter value={stats.mrr || calculateMrrFromCompanies(companies)} isCurrency={true} />
                     </div>
                     <div className="var-kpi-bottom">
                         <span className="var-kpi-badge up">+12.4% vs last month</span>
@@ -449,7 +484,7 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
                         </div>
                     </div>
                     <div className="var-kpi-value">
-                        <LiveCounter value={stats.arr || (stats.activeCompanies * 499 * 12)} isCurrency={true} />
+                        <LiveCounter value={stats.arr || (calculateMrrFromCompanies(companies) * 12)} isCurrency={true} />
                     </div>
                     <div className="var-kpi-bottom">
                         <span className="var-kpi-badge up">+18.7% vs last year</span>
@@ -647,14 +682,19 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
 
                                                 {/* Plan */}
                                                 <td style={{ padding: '14px 20px' }}>
-                                                    <span style={{ background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', padding: '4px 10px', borderRadius: '6px', fontSize: '11.5px', fontWeight: '700' }}>
-                                                        {comp.plan_name || 'INFY-POS PREMIUM (₹499/mo)'}
+                                                    <span style={{ 
+                                                        background: getCompanyPlanInfo(comp).isEnterprise ? '#EFF6FF' : '#ECFDF5', 
+                                                        color: getCompanyPlanInfo(comp).isEnterprise ? '#2563EB' : '#059669', 
+                                                        border: getCompanyPlanInfo(comp).isEnterprise ? '1px solid #BFDBFE' : '1px solid #A7F3D0', 
+                                                        padding: '4px 10px', borderRadius: '6px', fontSize: '11.5px', fontWeight: '700' 
+                                                    }}>
+                                                        {getCompanyPlanInfo(comp).plan}
                                                     </span>
                                                 </td>
 
                                                 {/* Price */}
-                                                <td style={{ padding: '14px 20px', fontWeight: '800', color: '#0F172A', fontSize: '13px' }}>
-                                                    {comp.price || '₹499 /mo'}
+                                                <td style={{ padding: '14px 20px', fontWeight: '800', color: getCompanyPlanInfo(comp).isEnterprise ? '#2563EB' : '#0F172A', fontSize: '13px' }}>
+                                                    {getCompanyPlanInfo(comp).price}
                                                 </td>
 
                                                 {/* Status */}
@@ -766,10 +806,15 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
                                     {/* Card Details */}
                                     <div style={{ background: '#F8FAFC', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#64748B', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                         <div><strong>Key:</strong> <span style={{ fontFamily: 'monospace', fontWeight: '700', color: '#1E293B' }}>{comp.key_code || `INFYPOS-KEY-${comp.id || 1}`}</span></div>
-                                        <div><strong>Price:</strong> <span style={{ fontWeight: '800', color: '#059669' }}>{comp.price || '₹499 /mo'}</span></div>
+                                        <div><strong>Price:</strong> <span style={{ fontWeight: '800', color: getCompanyPlanInfo(comp).isEnterprise ? '#2563EB' : '#059669' }}>{getCompanyPlanInfo(comp).price}</span></div>
                                         <div style={{ display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
-                                            <span style={{ background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
-                                                {comp.plan_name || 'INFY-POS PREMIUM'}
+                                            <span style={{ 
+                                                background: getCompanyPlanInfo(comp).isEnterprise ? '#EFF6FF' : '#ECFDF5', 
+                                                color: getCompanyPlanInfo(comp).isEnterprise ? '#2563EB' : '#059669', 
+                                                border: getCompanyPlanInfo(comp).isEnterprise ? '1px solid #BFDBFE' : '1px solid #A7F3D0', 
+                                                padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' 
+                                            }}>
+                                                {getCompanyPlanInfo(comp).plan}
                                             </span>
                                         </div>
                                     </div>
@@ -951,6 +996,7 @@ const SuperAdminSubscriptions = ({ onNavigate }) => {
                                 >
                                     <option value="trial_14">⏱ 14 Days Commercial Free Trial (₹0 Free)</option>
                                     <option value="monthly_30">⚡ Monthly Plan (30 Days - ₹499/mo)</option>
+                                    <option value="enterprise_30">🏢 Monthly Enterprise (30 Days - ₹2,999/mo)</option>
                                     <option value="quarterly_90">🚀 3 Months Plan (90 Days - ₹1,497)</option>
                                     <option value="yearly_365">👑 1 Year Full License (365 Days - ₹5,988)</option>
                                 </select>

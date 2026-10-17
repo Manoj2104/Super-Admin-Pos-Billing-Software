@@ -14,6 +14,8 @@ import SuperAdminBackups from './SuperAdminBackups';
 import SuperAdminReports from './SuperAdminReports';
 import SuperAdminSettings from './SuperAdminSettings';
 import SuperAdminLogin from './SuperAdminLogin';
+import SuperAdminSoftwareUpdates from './SuperAdminSoftwareUpdates';
+
 
 /**
  * SuperAdminPortal - Enterprise Owner Control Center Root Component v2.4
@@ -61,10 +63,13 @@ const SuperAdminPortal = () => {
             case 'audit':
             case 'health':
                 return <SuperAdminSettings />;
+            case 'software-updates':
+                return <SuperAdminSoftwareUpdates />;
             default:
                 return <SuperAdminDashboard onNavigate={setActiveTab} />;
         }
     };
+
 
     return (
         <SuperAdminLayout activeTab={activeTab} setActiveTab={setActiveTab}>

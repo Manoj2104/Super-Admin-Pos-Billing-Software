@@ -428,7 +428,30 @@ try {
             $devices = ($devResp['success'] && is_array($devResp['data'])) ? $devResp['data'] : [];
             $devicesCount = count($devices);
 
-            $mrr          = $activeCompanies * 499.00;
+            // Fetch keys to accurately compute MRR based on active plans & pricing
+            $keysResp = supabaseRest('/activation_keys?select=company_id,status,plan_name,price&order=id.desc');
+            $keysData = ($keysResp['success'] && is_array($keysResp['data'])) ? $keysResp['data'] : [];
+            $keysByComp = [];
+            foreach ($keysData as $k) {
+                if (!empty($k['company_id']) && !isset($keysByComp[$k['company_id']])) {
+                    $keysByComp[$k['company_id']] = $k;
+                }
+            }
+
+            $mrr = 0.0;
+            foreach ($companies as $c) {
+                if (($c['status'] ?? '') === 'active') {
+                    $compId = $c['id'] ?? 0;
+                    $keyObj = $keysByComp[$compId] ?? null;
+                    $cPlan = strtolower(($keyObj['plan_name'] ?? '') . ' ' . ($c['plan_name'] ?? ''));
+                    $cPrice = (float)($keyObj['price'] ?? 0);
+                    if (str_contains($cPlan, 'enterprise') || $cPrice == 2999.00) {
+                        $mrr += 2999.00;
+                    } else {
+                        $mrr += 499.00;
+                    }
+                }
+            }
             $arr          = $mrr * 12;
             $displayTotal = $totalCompanies > 0 ? $totalCompanies : 1;
 
@@ -519,6 +542,19 @@ try {
                     $daysRemaining = max(0, (int) round($diff));
                 }
 
+                $status = $comp['status'] ?? 'active';
+                $isEnterprise = (stripos($planName, 'enterprise') !== false) || (!empty($keyObj['price']) && (float)$keyObj['price'] == 2999.00);
+
+                if ($status === 'active') {
+                    $priceStr = $isEnterprise ? '₹2,999 /mo' : '₹499 /mo';
+                    $mrrStr   = $isEnterprise ? '₹2,999' : '₹499';
+                    $priceVal = $isEnterprise ? 2999.00 : 499.00;
+                } else {
+                    $priceStr = 'Free Trial (₹0)';
+                    $mrrStr   = '₹0';
+                    $priceVal = 0.00;
+                }
+
                 return [
                     'id'                  => $comp['id'],
                     'name'                => $comp['name'] ?? 'Store',
@@ -528,14 +564,15 @@ try {
                     'business_type'       => !empty($comp['business_type']) ? $comp['business_type'] : 'Supermarket',
                     'gst_number'          => $comp['gst_number'] ?? '33AABCU9603R1ZM',
                     'country'             => 'India',
-                    'status'              => $comp['status'] ?? 'active',
+                    'status'              => $status,
                     'days_remaining'      => $daysRemaining,
                     'trial_ends_at'       => !empty($comp['trial_ends_at']) ? date('d M Y', strtotime($comp['trial_ends_at'])) : 'N/A',
                     'subscription_ends_at'=> !empty($comp['subscription_ends_at']) ? date('d M Y', strtotime($comp['subscription_ends_at'])) : 'N/A',
                     'key_code'            => $keyCode,
                     'plan_name'           => $planName,
-                    'price'               => ($comp['status'] ?? '') === 'active' ? '₹499 /mo' : 'Free Trial (₹0)',
-                    'mrr_amount'          => ($comp['status'] ?? '') === 'active' ? '₹499' : '₹0',
+                    'price'               => $priceStr,
+                    'price_amount'        => $priceVal,
+                    'mrr_amount'          => $mrrStr,
                     'created_at'          => !empty($comp['created_at']) ? date('d M Y, H:i', strtotime($comp['created_at'])) : 'N/A',
                     'users_count'         => 1,
                     'products_count'      => 125,
@@ -596,8 +633,14 @@ try {
             $input = array_merge($_POST, $jsonInput);
             $days   = (int) ($input['days'] ?? 30);
             $months = (int) ($input['months'] ?? 1);
+            $planType = $input['plan_type'] ?? ($input['plan'] ?? '');
 
-            if ($days > 0) {
+            if ($planType === 'enterprise_30' || $planType === 'enterprise' || ($input['plan_name'] ?? '') === 'Billrys POS Enterprise' || (isset($input['price']) && (float)$input['price'] == 2999.00)) {
+                $expiresAt = date('Y-m-d H:i:s', strtotime("+30 days"));
+                $durationLabel = 'Enterprise Monthly (30 Days)';
+                $planName = 'Billrys POS Enterprise';
+                $price = 2999.00;
+            } else if ($days > 0) {
                 $expiresAt = date('Y-m-d H:i:s', strtotime("+{$days} days"));
                 $durationLabel = $days === 14 ? '14-Day Free Trial' : ($days . ' Days');
                 $planName = $days === 14 ? 'INFY-POS FREE TRIAL (14 Days)' : 'INFY-POS PREMIUM (' . $days . ' Days)';
@@ -610,10 +653,11 @@ try {
             }
 
             // Cryptographically secure random key generator with 128-bit CSPRNG entropy
-            $rawBytes = random_bytes(16);
-            $part1 = strtoupper(bin2hex(substr($rawBytes, 0, 4)));
-            $part2 = strtoupper(bin2hex(substr($rawBytes, 4, 4)));
-            $keyCode = 'INFYPOS-2026-KEY-' . $part1 . $part2;
+            $rawBytes = random_bytes(6);
+            $part1 = strtoupper(bin2hex(substr($rawBytes, 0, 2)));
+            $part2 = strtoupper(bin2hex(substr($rawBytes, 2, 2)));
+            $part3 = strtoupper(bin2hex(substr($rawBytes, 4, 2)));
+            $keyCode = 'BILLRYSPOS-' . $part1 . '-' . $part2 . '-' . $part3;
 
             supabaseRest('/activation_keys', 'POST', [
                 'key_code'   => $keyCode,
@@ -646,26 +690,40 @@ try {
             $newEnds = date('Y-m-d H:i:s', strtotime('+30 days'));
             $planName = 'INFY-POS PREMIUM';
             $status = 'active';
+            $price = 499.00;
 
-            if ($planType === 'trial_14') {
+            if ($planType === 'enterprise_30' || $planType === 'enterprise') {
+                $planName = 'Billrys POS Enterprise';
+                $status   = 'active';
+                $price    = 2999.00;
+                $newEnds  = date('Y-m-d H:i:s', strtotime('+30 days'));
+            } else if ($planType === 'trial_14') {
                 $planName = 'INFY-POS FREE TRIAL (14 Days)';
                 $status   = 'trial';
+                $price    = 0.00;
                 $newEnds  = date('Y-m-d H:i:s', strtotime('+14 days'));
             } else if ($planType === 'monthly_30') {
                 $planName = 'INFY-POS MONTHLY PLAN (30 Days)';
                 $status   = 'active';
+                $price    = 499.00;
                 $newEnds  = date('Y-m-d H:i:s', strtotime('+30 days'));
             } else if ($planType === 'quarterly_90') {
                 $planName = 'INFY-POS 3-MONTH PLAN (90 Days)';
                 $status   = 'active';
+                $price    = 1497.00;
                 $newEnds  = date('Y-m-d H:i:s', strtotime('+90 days'));
             } else if ($planType === 'yearly_365') {
                 $planName = 'INFY-POS ANNUAL PLAN (365 Days)';
                 $status   = 'active';
+                $price    = 5988.00;
                 $newEnds  = date('Y-m-d H:i:s', strtotime('+365 days'));
             }
 
-            $newKeyCode = 'INFYPOS-2026-KEY-' . strtoupper(substr(md5(uniqid() . $companyId . time()), 0, 8));
+            $rawBytes = random_bytes(6);
+            $part1 = strtoupper(bin2hex(substr($rawBytes, 0, 2)));
+            $part2 = strtoupper(bin2hex(substr($rawBytes, 2, 2)));
+            $part3 = strtoupper(bin2hex(substr($rawBytes, 4, 2)));
+            $newKeyCode = 'BILLRYSPOS-' . $part1 . '-' . $part2 . '-' . $part3;
 
             supabaseRest('/companies?id=eq.' . $companyId, 'PATCH', [
                 'status'               => $status,
@@ -691,7 +749,7 @@ try {
                 'key_code'            => $newKeyCode,
                 'company_id'          => $companyId,
                 'plan_name'           => $planName,
-                'price'               => 0.00,
+                'price'               => $price,
                 'status'              => 'active',
                 'machine_fingerprint' => $existingFingerprint,
                 'activated_at'        => date('c'),

@@ -120,6 +120,20 @@ const SuperAdminDashboard = ({ onNavigate }) => {
                         <FontAwesomeIcon icon={faKey} />
                         <span>Generate Key</span>
                     </button>
+                    <button
+                        className="dashboard-import-button"
+                        style={{
+                            background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                            color: '#FFFFFF',
+                            borderColor: '#059669',
+                            boxShadow: '0 2px 8px rgba(16,185,129,0.3)',
+                            fontWeight: 700
+                        }}
+                        onClick={() => onNavigate('software-updates')}
+                    >
+                        <FontAwesomeIcon icon={faRotate} />
+                        <span>Software Updates</span>
+                    </button>
                 </div>
             </div>
 

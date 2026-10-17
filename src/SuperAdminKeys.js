@@ -93,7 +93,9 @@ const SuperAdminKeys = () => {
         setGenerating(true);
         try {
             let payload = {};
-            if (selectedDuration === 'trial_14') {
+            if (selectedDuration === 'enterprise_30') {
+                payload = { days: 30, months: 1, plan_type: 'enterprise_30', plan_name: 'Billrys POS Enterprise', price: 2999.00 };
+            } else if (selectedDuration === 'trial_14') {
                 payload = { days: 14, months: 0 };
             } else if (selectedDuration === 'days_30') {
                 payload = { days: 30, months: 1 };
@@ -116,9 +118,10 @@ const SuperAdminKeys = () => {
 
             const generatedCode = (res && res.data && res.data.key_code) 
                 ? res.data.key_code 
-                : `INFYPOS-2026-KEY-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+                : `BILLRYSPOS-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-            const planLabel = selectedDuration === 'trial_14' ? 'INFY-POS FREE TRIAL (14 Days)'
+            const planLabel = selectedDuration === 'enterprise_30' ? 'Billrys POS Enterprise — Monthly (₹2,999/mo)'
+                : selectedDuration === 'trial_14' ? 'INFY-POS FREE TRIAL (14 Days)'
                 : selectedDuration === 'days_30' ? 'INFY-POS MONTHLY PLAN (30 Days)'
                 : selectedDuration === 'days_90' ? 'INFY-POS QUARTERLY (90 Days)'
                 : selectedDuration === 'days_180' ? 'INFY-POS SEMI-ANNUAL (180 Days)'
@@ -584,7 +587,8 @@ const SuperAdminKeys = () => {
                                 style={{ width: '100%', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '10px 14px', fontSize: '13.5px', color: '#0F172A', fontWeight: '600' }}
                             >
                                 <option value="trial_14">⏱ 14 Days Commercial Free Trial (14 Days Free)</option>
-                                <option value="days_30">1 Month Standard License (30 Days)</option>
+                                <option value="days_30">1 Month Standard License (30 Days — ₹499/mo)</option>
+                                <option value="enterprise_30">🚀 Billrys POS Enterprise — Monthly (30 Days — ₹2,999/mo)</option>
                                 <option value="days_90">3 Months Quarterly License (90 Days)</option>
                                 <option value="days_180">6 Months Semi-Annual License (180 Days)</option>
                                 <option value="days_365">1 Year Full License (365 Days - Recommended)</option>
@@ -709,6 +713,7 @@ const SuperAdminKeys = () => {
                         >
                             <option value="all">Duration: All</option>
                             <option value="14 Days">14 Days Free Trial</option>
+                            <option value="Enterprise">Enterprise (₹2,999/mo)</option>
                             <option value="30 Days">1 Month (30 Days)</option>
                             <option value="90 Days">3 Months Quarterly</option>
                             <option value="180 Days">6 Months Semi-Annual</option>

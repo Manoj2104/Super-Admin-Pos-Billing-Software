@@ -55,6 +55,7 @@ const SuperAdminLayout = ({ activeTab, setActiveTab, children }) => {
                 { id: 'dashboard', label: 'Dashboard', icon: faChartLine },
                 { id: 'companies', label: 'Companies', icon: faBuilding },
                 { id: 'revenue', label: 'Subscriptions', icon: faDollarSign },
+                { id: 'software-updates', label: 'Software Updates', icon: faRotate },
                 { id: 'keys', label: 'Activation Keys', icon: faKey },
                 { id: 'devices', label: 'Connected Devices', icon: faLaptopCode },
                 { id: 'billing', label: 'Billing & Payments', icon: faCreditCard },
@@ -70,6 +71,7 @@ const SuperAdminLayout = ({ activeTab, setActiveTab, children }) => {
                 { id: 'support', label: 'Support Tickets', icon: faLifeRing },
                 { id: 'backups', label: 'Backup & Restore', icon: faCloudDownload },
                 { id: 'reports', label: 'Reports', icon: faFileAlt },
+                { id: 'software-updates', label: 'Software Updates', icon: faRotate },
             ]
         },
         {
